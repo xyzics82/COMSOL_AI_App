@@ -1,0 +1,19 @@
+{
+ "am15": {
+  "origin": "자동 다운로드",
+  "filename": "ASTMG173.csv (pvlib 사본)",
+  "rows": 2002,
+  "detail": "3중 검증 통과 (2002점/기준값/적분 100.04 mW/cm²)",
+  "warnings": [],
+  "saved_at": "2026-07-07 09:31"
+ },
+ "mapbi3_nk": {
+  "origin": "업로드",
+  "filename": "Phillips.csv",
+  "rows": 586,
+  "detail": "CSV/YML → 3열(um, n, k) 변환",
+  "warnings": [],
+  "archived": "mapbi3_nk/20260707_102400_Phillips.csv",
+  "saved_at": "2026-07-07 10:24"
+ }
+}

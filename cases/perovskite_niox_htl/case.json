@@ -1,0 +1,111 @@
+{
+  "id": "perovskite_niox_htl",
+  "name": "페로브스카이트 NiOx HTL 두께 그리드 (생성 모드)",
+  "desc": "NiOx(HTL)/MAPbI3 800nm/C60/BCP 1D 스택. NiOx 두께 10~30nm 스윕 → 지표 히트맵. NiOx 물성: Sahu & Dixit 2018 SCAPS 세트(원출처 개별 인용)",
+  "layers": [
+    {
+      "name": "NiOx",
+      "material": "niox",
+      "thickness_nm": "{t_niox}",
+      "doping": {
+        "type": "acceptor",
+        "conc": "1e18[1/cm^3]",
+        "ref": "sahu2018"
+      }
+    },
+    {
+      "name": "absorber",
+      "material": "mapbi3",
+      "thickness_nm": "{t_abs}",
+      "absorber": true,
+      "srh": {
+        "taun": "{taun_ns}[ns]",
+        "taup": "{taun_ns}[ns]"
+      }
+    },
+    {
+      "name": "C60",
+      "material": "c60",
+      "thickness_nm": "{t_c60}",
+      "doping": {
+        "type": "donor",
+        "conc": "2.6e17[1/cm^3]",
+        "ref": "rscadv2024"
+      }
+    },
+    {
+      "name": "BCP",
+      "material": "bcp",
+      "thickness_nm": "{t_bcp}",
+      "doping": {
+        "type": "donor",
+        "conc": "1e18[1/cm^3]",
+        "ref": "touafek2020"
+      }
+    }
+  ],
+  "generation": {
+    "layer": "absorber",
+    "lambda_nm": [
+      300,
+      850
+    ],
+    "spectrum_dataset": "am15",
+    "nk_dataset": "mapbi3_nk"
+  },
+  "voltage": {
+    "start": 0,
+    "stop": 1.2,
+    "step": 0.02
+  },
+  "grid": {
+    "x": {
+      "param": "t_niox",
+      "field": "niox_list_nm",
+      "label": "NiOx [nm]"
+    },
+    "y": {
+      "param": "t_c60",
+      "field": "c60_list_nm",
+      "label": "C60 [nm]"
+    }
+  },
+  "defaults": {
+    "t_abs": 800,
+    "t_bcp": 5
+  },
+  "schema": [
+    {
+      "key": "niox_list_nm",
+      "label": "NiOx 두께 목록 [nm]",
+      "type": "text",
+      "default": "10,15,20,25,30"
+    },
+    {
+      "key": "c60_list_nm",
+      "label": "C60 두께 목록 [nm] (기본: 20 고정)",
+      "type": "text",
+      "default": "20"
+    },
+    {
+      "key": "taun_ns",
+      "label": "흡수층 SRH τ [ns]",
+      "type": "number",
+      "default": 38.7
+    },
+    {
+      "key": "mode",
+      "label": "실행 방식",
+      "type": "select",
+      "options": [
+        "local",
+        "export"
+      ],
+      "default": "local"
+    }
+  ],
+  "data_requirements": [
+    "am15",
+    "mapbi3_nk"
+  ]
+}

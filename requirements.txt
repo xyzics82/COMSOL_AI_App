@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+mph
+numpy
+matplotlib
+requests
+python-multipart
+anthropic
+python-dotenv

@@ -1,0 +1,128 @@
+{
+  "noh2013": {
+    "citation": "Noh, Im, Heo, Mandal, Seok, Nano Lett. 13, 1764 (2013)",
+    "url": "https://doi.org/10.1021/nl400349b",
+    "used_for": [
+      "mapbi3.Eg"
+    ]
+  },
+  "hirasawa1994": {
+    "citation": "Hirasawa, Ishihara, Goto, Uchida, Miura, Physica B 201, 427 (1994)",
+    "url": "https://doi.org/10.1016/0921-4526(94)91130-4",
+    "used_for": [
+      "mapbi3.chi"
+    ]
+  },
+  "giorgi2013": {
+    "citation": "Giorgi, Fujisawa, Segawa, Yamashita, J. Phys. Chem. Lett. 4, 4213 (2013) — 유효질량 기반",
+    "url": "https://doi.org/10.1021/jz4023865",
+    "used_for": [
+      "mapbi3.Nc",
+      "mapbi3.Nv"
+    ]
+  },
+  "wehrenfennig2014": {
+    "citation": "Wehrenfennig, Eperon, Johnston, Snaith, Herz, Adv. Mater. 26, 1584 (2014)",
+    "url": "https://doi.org/10.1002/adma.201305172",
+    "used_for": [
+      "mapbi3.mun",
+      "mapbi3.mup"
+    ]
+  },
+  "stranks2014": {
+    "citation": "Stranks et al., Science 342, 341 (2014) — 확산길이 ~1um (τ=38.7ns 유도 근거)",
+    "url": "https://doi.org/10.1126/science.1243982",
+    "used_for": [
+      "mapbi3.taun(유도)"
+    ]
+  },
+  "sahu2018": {
+    "citation": "Sahu & Dixit, 'Inverted structure perovskite solar cells: A theoretical study' (arXiv:1806.03950) 표1 — 두께 최적화 벤치마크",
+    "url": "https://arxiv.org/abs/1806.03950",
+    "used_for": [
+      "mapbi3.epsr",
+      "케이스 검증 기준(v0)"
+    ]
+  },
+  "phillips2015": {
+    "citation": "Phillips et al. 2015 (refractiveindex.info CH3NH3PbI3/Phillips) — 타원계측 n,k 300-1500nm",
+    "url": "https://refractiveindex.info/?shelf=other&book=CH3NH3PbI3&page=Phillips",
+    "used_for": [
+      "데이터셋 mapbi3_nk"
+    ]
+  },
+  "rscadv2024": {
+    "citation": "RSC Adv. 14 (2024), DOI 10.1039/D4RA00634H, Table 2 (open access)",
+    "url": "https://pubs.rsc.org/en/content/articlehtml/2024/ra/d4ra00634h",
+    "used_for": [
+      "c60.* (전체 물성)",
+      "c60 도핑 ND=2.6e17"
+    ]
+  },
+  "touafek2020": {
+    "citation": "Touafek, Dridi, Mahamdi, J. Technology Innovations in Renewable Energy 9, 1 (2020), Table 1 — 실험 J-V 재현 검증 세트",
+    "url": "https://doi.org/10.6000/1929-6002.2020.09.01",
+    "used_for": [
+      "bcp.* (전체 물성)",
+      "bcp 도핑 권장(1e17 이상)",
+      "케이스 검증 기준(v1: BCP 두께 경향)"
+    ]
+  },
+  "hillkahn1999": {
+    "citation": "Hill & Kahn, J. Appl. Phys. 86, 4515 (1999) — BCP HOMO-LUMO 3.5 eV 원출처",
+    "url": "https://doi.org/10.1063/1.371395",
+    "used_for": [
+      "bcp.Eg(원출처)"
+    ]
+  },
+  "meskini2024": {
+    "citation": "Meskini & Asgharizadeh, Sci. Rep. 14, 5723 (2024), Table 1 — ITO/SnO2/MAPbI3/Spiro 실험 J-V 재현 SCAPS 세트 (SnO2 원출처: Yang 2019 JMCA 실험 등 표 각주)",
+    "url": "https://doi.org/10.1038/s41598-024-56461-z",
+    "used_for": ["sno2.* (전체 물성)", "sno2 도핑 ND=1e19"]
+  },
+  "nrel_g173": {
+    "citation": "ASTM G-173-03 Reference Spectra (SMARTS v2.9.2), NLR(National Laboratory of the Rockies, 구 NREL — 2025-12 개명) — global tilt 37°, 280-4000nm 2002점. 입수: pvlib-python 공개 사본 (2026-07-07 기준값 검증: 500nm=1.5451 W/m²/nm)",
+    "url": "https://www.nlr.gov/grid/solar-resource/spectra-am1.5",
+    "used_for": [
+      "데이터셋 am15(정밀본, 자동 다운로드)",
+      "Pin 적분(~100.04 mW/cm²)"
+    ]
+  },
+  "comsol_si_example": {
+    "citation": "COMSOL 6.4 Application Library: si_solar_cell_1d 모델 문서 — 1D 태양전지 레시피·광생성 적분식",
+    "url": "설치 폴더 doc/help/.../models.semicond.si_solar_cell_1d",
+    "used_for": [
+      "G_ph 수식 구조",
+      "si_demo 케이스",
+      "데이터셋 am15(동봉본)"
+    ]
+  },
+  "irwin2011": {
+    "citation": "Irwin et al., Chem. Mater. 23, 2218–2226 (2011) — NiO 계면막의 Eg 3.6 eV, χ 1.8 eV",
+    "url": "https://doi.org/10.1021/cm200229e",
+    "used_for": [
+      "케이스 perovskite_niox_htl 신규 재료 (생성 모드, 사용자 승인)"
+    ]
+  },
+  "gielisse1965": {
+    "citation": "Gielisse et al., J. Appl. Phys. 36, 2446 (1965) — NiO 유전율 10.7",
+    "url": "https://doi.org/10.1063/1.1714508",
+    "used_for": [
+      "케이스 perovskite_niox_htl 신규 재료 (생성 모드, 사용자 승인)"
+    ]
+  },
+  "wu2013": {
+    "citation": "Wu & Yang, Nanoscale Res. Lett. 8, 33 (2013) — NiO 박막 전자 이동도",
+    "url": "https://doi.org/10.1186/1556-276X-8-33",
+    "used_for": [
+      "케이스 perovskite_niox_htl 신규 재료 (생성 모드, 사용자 승인)"
+    ]
+  },
+  "tyagi2012": {
+    "citation": "Tyagi, Tomar, Gupta, Anal. Chim. Acta 726, 93–101 (2012) — p형 NiO 정공 이동도 2.8",
+    "url": "https://doi.org/10.1016/j.aca.2012.03.027",
+    "used_for": [
+      "케이스 perovskite_niox_htl 신규 재료 (생성 모드, 사용자 승인)"
+    ]
+  }
+}

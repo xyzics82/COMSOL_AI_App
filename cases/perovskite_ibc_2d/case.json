@@ -1,0 +1,18 @@
+{
+  "id": "perovskite_ibc_2d",
+  "name": "페로브스카이트 IBC 2D — 전극 폭×간격 그리드 (v2)",
+  "desc": "후면 깍지형(IBC) half-cell 2D 단면. n: SnO2 20nm(ND 1e19), p: NiOx 10nm(NA 1e18), 흡수층 MAPbI3. 전극 폭 W × 간격 gap 그리드 → 지표 히트맵 + 조합별 2D 전하분포. 사양: cases/perovskite_ibc_2d/CASE_SPEC.md",
+  "builder": "ibc2d",
+  "grid": {
+    "x": {"param": "W_um", "field": "w_list_um", "label": "전극 폭 W [um]"},
+    "y": {"param": "gap_um", "field": "gap_list_um", "label": "간격 gap [um]"}
+  },
+  "schema": [
+    {"key": "w_list_um", "label": "전극 폭 W 목록 [um]", "type": "text", "default": "1,2,3,4,5"},
+    {"key": "gap_list_um", "label": "n/p 간격 gap 목록 [um]", "type": "text", "default": "1,3,5"},
+    {"key": "t_abs_nm", "label": "흡수층 두께 [nm]", "type": "number", "default": 800},
+    {"key": "taun_ns", "label": "흡수층 SRH τ [ns]", "type": "number", "default": 38.7},
+    {"key": "mode", "label": "실행 방식", "type": "select", "options": ["local", "export"], "default": "local"}
+  ],
+  "data_requirements": ["am15", "mapbi3_nk"]
+}

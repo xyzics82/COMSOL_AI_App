@@ -1,0 +1,145 @@
+{
+  "mapbi3": {
+    "name": "MAPbI3 (methylammonium lead iodide)",
+    "default_version": "v1",
+    "versions": {
+      "v1": {
+        "date": "2026-07-06",
+        "source_type": "literature",
+        "props": {
+          "Eg": "1.55[V]",
+          "chi": "3.9[V]",
+          "epsr": "10",
+          "Nc": "2.75e18[1/cm^3]",
+          "Nv": "3.9e18[1/cm^3]",
+          "mun": "10[cm^2/(V*s)]",
+          "mup": "10[cm^2/(V*s)]"
+        },
+        "refs": {
+          "Eg": "noh2013",
+          "chi": "hirasawa1994",
+          "epsr": "sahu2018",
+          "Nc": "giorgi2013",
+          "Nv": "giorgi2013",
+          "mun": "wehrenfennig2014",
+          "mup": "wehrenfennig2014"
+        }
+      }
+    }
+  },
+  "c60": {
+    "name": "C60 (fullerene, ETL)",
+    "default_version": "v1",
+    "versions": {
+      "v1": {
+        "date": "2026-07-06",
+        "source_type": "literature",
+        "props": {
+          "Eg": "1.70[V]",
+          "chi": "3.90[V]",
+          "epsr": "4.2",
+          "Nc": "8.0e19[1/cm^3]",
+          "Nv": "8.0e19[1/cm^3]",
+          "mun": "0.08[cm^2/(V*s)]",
+          "mup": "3.5e-3[cm^2/(V*s)]"
+        },
+        "refs": {
+          "Eg": "rscadv2024",
+          "chi": "rscadv2024",
+          "epsr": "rscadv2024",
+          "Nc": "rscadv2024",
+          "Nv": "rscadv2024",
+          "mun": "rscadv2024",
+          "mup": "rscadv2024"
+        }
+      }
+    }
+  },
+  "sno2": {
+    "name": "SnO2 (tin oxide, ETL)",
+    "default_version": "v1",
+    "versions": {
+      "v1": {
+        "date": "2026-07-07",
+        "source_type": "literature",
+        "props": {
+          "Eg": "3.44[V]",
+          "chi": "4.39[V]",
+          "epsr": "9.0",
+          "Nc": "2.2e18[1/cm^3]",
+          "Nv": "1.8e19[1/cm^3]",
+          "mun": "7.56[cm^2/(V*s)]",
+          "mup": "0.1[cm^2/(V*s)]"
+        },
+        "refs": {
+          "Eg": "meskini2024",
+          "chi": "meskini2024",
+          "epsr": "meskini2024",
+          "Nc": "meskini2024",
+          "Nv": "meskini2024",
+          "mun": "meskini2024",
+          "mup": "meskini2024"
+        },
+        "notes": "Meskini 2024 Table 1 (실험 J-V 재현 세트). 지수 원문 대조 완료: Nc/Nv (×10^19)=0.22/1.8, ND 1e19"
+      }
+    }
+  },
+  "bcp": {
+    "name": "BCP (bathocuproine, buffer)",
+    "default_version": "v1",
+    "versions": {
+      "v1": {
+        "date": "2026-07-06",
+        "source_type": "literature",
+        "props": {
+          "Eg": "3.5[V]",
+          "chi": "3.90[V]",
+          "epsr": "4.0",
+          "Nc": "2.2e15[1/cm^3]",
+          "Nv": "1.8e17[1/cm^3]",
+          "mun": "0.001[cm^2/(V*s)]",
+          "mup": "0.002[cm^2/(V*s)]"
+        },
+        "refs": {
+          "Eg": "touafek2020",
+          "chi": "touafek2020",
+          "epsr": "touafek2020",
+          "Nc": "touafek2020",
+          "Nv": "touafek2020",
+          "mun": "touafek2020",
+          "mup": "touafek2020"
+        },
+        "notes": "Touafek 2020 세트는 실험 J-V 재현으로 검증됨. Eg(HOMO-LUMO 3.5eV) 원출처는 hillkahn1999"
+      }
+    }
+  },
+  "niox": {
+    "name": "NiOx (nickel oxide, HTL)",
+    "default_version": "v1",
+    "versions": {
+      "v1": {
+        "date": "2026-07-07",
+        "source_type": "literature",
+        "props": {
+          "Eg": "3.6[V]",
+          "chi": "1.8[V]",
+          "epsr": "10.7",
+          "Nc": "2.8e18[1/cm^3]",
+          "Nv": "1e19[1/cm^3]",
+          "mun": "12[cm^2/(V*s)]",
+          "mup": "2.8[cm^2/(V*s)]"
+        },
+        "refs": {
+          "Eg": "irwin2011",
+          "chi": "irwin2011",
+          "epsr": "gielisse1965",
+          "Nc": "sahu2018",
+          "Nv": "sahu2018",
+          "mun": "wu2013",
+          "mup": "tyagi2012"
+        },
+        "notes": "Sahu & Dixit 2018 (arXiv:1806.03950) Table 1의 NiO SCAPS 검증 세트를 채택, 각 물성은 그 표가 인용한 원출처로 표기. NA=1e18도 같은 표 [케이스 생성 모드 등록 — AI 제안 문헌값, 사용자 승인. 원문 대조 권장]"
+      }
+    }
+  }
+}

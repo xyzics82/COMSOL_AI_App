@@ -1,0 +1,30 @@
+{
+  "id": "perovskite_etl_stack",
+  "name": "페로브스카이트 p-i-n + C60/BCP ETL 그리드 (v1)",
+  "desc": "p+(이상화 30nm)/MAPbI3 800nm/C60/BCP 다층 스택. C60×BCP 두께 그리드 → 지표 히트맵. 사양: cases/perovskite_etl_stack/CASE_SPEC.md",
+  "layers": [
+    {"name": "p_plus", "material": "mapbi3", "thickness_nm": 30,
+     "doping": {"type": "acceptor", "conc": "1e18[1/cm^3]"}},
+    {"name": "absorber", "material": "mapbi3", "thickness_nm": "{t_abs}",
+     "absorber": true,
+     "srh": {"taun": "{taun_ns}[ns]", "taup": "{taun_ns}[ns]"}},
+    {"name": "C60", "material": "c60", "thickness_nm": "{t_c60}",
+     "doping": {"type": "donor", "conc": "2.6e17[1/cm^3]", "ref": "rscadv2024"}},
+    {"name": "BCP", "material": "bcp", "thickness_nm": "{t_bcp}",
+     "doping": {"type": "donor", "conc": "{bcp_nd}[1/cm^3]", "ref": "touafek2020"}}
+  ],
+  "generation": {"layer": "absorber", "lambda_nm": [300, 850],
+                 "spectrum_dataset": "am15", "nk_dataset": "mapbi3_nk"},
+  "voltage": {"start": 0.0, "stop": 1.2, "step": 0.02},
+  "grid": {"x": {"param": "t_c60", "field": "c60_list_nm", "label": "C60 [nm]"},
+           "y": {"param": "t_bcp", "field": "bcp_list_nm", "label": "BCP [nm]"}},
+  "defaults": {"t_abs": 800},
+  "schema": [
+    {"key": "c60_list_nm", "label": "C60 두께 목록 [nm]", "type": "text", "default": "20,30,40,50,60"},
+    {"key": "bcp_list_nm", "label": "BCP 두께 목록 [nm]", "type": "text", "default": "5,10,15"},
+    {"key": "bcp_nd", "label": "BCP 도핑 ND [cm^-3] (Touafek 2020: 1e17 이상 권장)", "type": "text", "default": "1e18"},
+    {"key": "taun_ns", "label": "흡수층 SRH τ [ns]", "type": "number", "default": 38.7},
+    {"key": "mode", "label": "실행 방식", "type": "select", "options": ["local", "export"], "default": "local"}
+  ],
+  "data_requirements": ["am15", "mapbi3_nk"]
+}

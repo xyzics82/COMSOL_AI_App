@@ -1,0 +1,202 @@
+"""IBC(후면 깍지형 전극) 페로브스카이트 2D 빌더 — v2 첫 '진짜 2D' 구조.
+
+사양: cases/perovskite_ibc_2d/CASE_SPEC.md
+- half-cell 대칭 단면: x∈[0, L], L = W + g. 사각형 5개 타일링(전부 mappable).
+- 확정 API 재사용: Box 선택(entitydim=str, 층보다 큰 상자), Map 메시, 평형→스윕 스터디.
+- 신규 API [스파이크 확인 대상]: Union 선택(흡수층 3개 도메인 묶기).
+  실패 시 폴백: 흡수층 물성은 기본 smm1에 직접 설정(전역) + CTL smm이 국소 재정의,
+  광생성은 y-게이트 식으로 흡수층 높이에서만.
+"""
+from pathlib import Path
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parents[1]
+DATA = ROOT / "data"
+
+T_SNO2 = 20.0   # nm (사용자 사양)
+T_NIOX = 10.0   # nm (사용자 사양)
+D_OUT = 10000.0  # nm — 면외 두께 = 전극 길이 10um (사용자 사양)
+
+
+def _try_set(node, pairs, log, label):
+    for prop, val in pairs:
+        try:
+            node.set(prop, val)
+            return True
+        except Exception as e:
+            log(f"    set {label}.{prop}: {type(e).__name__} (다음 후보)")
+    return False
+
+
+def _box(j, tag, entity_dim, x0, x1, y0, y1, log):
+    """확정 패턴: 좌표 Box 선택 (entitydim 문자열, inside 조건)."""
+    sel = j.selection().create(tag, "Box")
+    for v in (str(entity_dim),):
+        sel.set("entitydim", v)
+    sel.set("xmin", f"{x0:g}[nm]")
+    sel.set("xmax", f"{x1:g}[nm]")
+    sel.set("ymin", f"{y0:g}[nm]")
+    sel.set("ymax", f"{y1:g}[nm]")
+    _try_set(sel, [("condition", "inside")], log, tag)
+    return sel
+
+
+def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, vcfg, log):
+    """IBC half-cell 모델 생성. mats: {'absorber':props, 'sno2':props, 'niox':props,
+    'niox_na': str, 'sno2_nd': str}. 반환: (model, area_cm2)."""
+    L = w_nm + gap_nm                    # half-n + gap + half-p
+    hw = w_nm / 2.0
+    H = T_SNO2 + t_abs_nm                # 전체 높이 (흡수층 윗면)
+    eps = 0.5
+    model = client.create(name)
+    j = model.java
+    try:
+        j.component().create("comp1", True)
+    except Exception:
+        j.modelNode().create("comp1")
+    comp = j.component("comp1")
+    geom = comp.geom().create("geom1", 2)
+    geom.lengthUnit("nm")
+    j.param().set("V0", "0[V]")
+
+    # 사각형 5개 타일 (겹침 없음 → Form Union 후에도 mappable)
+    rects = [
+        ("r_sno2", 0.0, hw, 0.0, T_SNO2),                    # 1: SnO2
+        ("r_gap", hw, L - hw, 0.0, T_SNO2),                  # 2: 간격부 흡수층(바닥)
+        ("r_niox", L - hw, L, 0.0, T_NIOX),                  # 3: NiOx
+        ("r_absnx", L - hw, L, T_NIOX, T_SNO2),              # 4: NiOx 위 흡수층 채움
+        ("r_top", 0.0, L, T_SNO2, H),                        # 5: 본체 흡수층
+    ]
+    for tag, x0, x1, y0, y1 in rects:
+        r = geom.create(tag, "Rectangle")
+        r.set("size", [f"{x1 - x0:g}", f"{y1 - y0:g}"])
+        r.set("pos", [f"{x0:g}", f"{y0:g}"])
+    geom.run()
+    log(f"  지오메트리 OK (IBC 2D half-cell): W={w_nm/1000:g}um, gap={gap_nm/1000:g}um, "
+        f"L={L/1000:g}um, t_abs={t_abs_nm:g}nm, SnO2 {T_SNO2:g}/NiOx {T_NIOX:g}nm")
+
+    # 도메인 선택: CTL 2개 + 흡수층 3개 → Union
+    _box(j, "d_sno2", 2, -eps, hw + eps, -eps, T_SNO2 + eps, log)
+    _box(j, "d_niox", 2, L - hw - eps, L + eps, -eps, T_NIOX + eps, log)
+    _box(j, "d_gap", 2, hw - eps, L - hw + eps, -eps, T_SNO2 + eps, log)
+    _box(j, "d_absnx", 2, L - hw - eps, L + eps, T_NIOX - eps, T_SNO2 + eps, log)
+    _box(j, "d_top", 2, -eps, L + eps, T_SNO2 - eps, H + eps, log)
+    absorber_sel = None
+    try:
+        uni = j.selection().create("d_abs", "Union")
+        uni.set("input", ["d_gap", "d_absnx", "d_top"])
+        absorber_sel = "d_abs"
+        log("  흡수층 선택: Union(d_gap+d_absnx+d_top) OK [스파이크 확인]")
+    except Exception as e:
+        log(f"  Union 선택 실패 ({type(e).__name__}) — 기본 smm 폴백 사용")
+
+    # 접점 경계 선택 (바닥의 해당 구간 에지만 완전히 들어오게)
+    _box(j, "b_n", 1, -eps, hw + eps, -eps, eps, log)          # SnO2 바닥 (접지)
+    _box(j, "b_p", 1, L - hw - eps, L + eps, -eps, eps, log)   # NiOx 바닥 (V0)
+
+    # 보간 함수 + 광생성 (윗면 y=H에서 하향)
+    from . import data_prep
+    am15 = np.loadtxt(DATA / data_prep.dataset("am15")["file"], encoding="utf-8")
+    f1 = j.func().create("int1", "Interpolation")
+    f1.set("source", "table")
+    f1.set("table", [[str(r[0]), str(r[1])] for r in am15])
+    f1.set("funcname", "F")
+    _try_set(f1, [("argunit", ["nm"]), ("argunit", "nm")], log, "int1")
+    _try_set(f1, [("fununit", ["W/m^2/nm"]), ("fununit", "W/m^2/nm")], log, "int1")
+    nk = np.loadtxt(DATA / data_prep.dataset("mapbi3_nk")["file"], encoding="utf-8")
+    f2 = j.func().create("int2", "Interpolation")
+    f2.set("source", "table")
+    f2.set("table", [[str(r[0]), str(r[2])] for r in nk])
+    f2.set("funcname", "kref")
+    _try_set(f2, [("argunit", ["um"]), ("argunit", "um")], log, "int2")
+    _try_set(f2, [("fununit", ["1"]), ("fununit", "1")], log, "int2")
+    expr = (f"4*pi/(h_const*c_const)*integrate(kref(lm)*F(lm)*"
+            f"exp(-4*pi*kref(lm)*({H:g}[nm]-y)/lm),lm,300[nm],850[nm])")
+    try:
+        var = comp.variable().create("var1")
+    except Exception:
+        var = j.variable().create("var1")
+        var.model("comp1")
+    var.set("G_ph", expr)
+    log(f"  광생성 OK: 윗면 입사(깊이 = {H:g}nm − y), 음영 없음(IBC)")
+
+    # 물리: 기본 smm1 = 흡수층 물성(전역), CTL은 국소 재정의
+    semi = comp.physics().create("semi", "Semiconductor", "geom1")
+    try:
+        semi.prop("d").set("d", f"{D_OUT:g}[nm]")
+        log(f"  면외 두께 OK: d = {D_OUT/1000:g}um (전극 길이)")
+    except Exception as e:
+        log(f"  면외 두께 설정 실패 ({type(e).__name__}) — 기본값(1m): J 환산 주의")
+    area_cm2 = (L * 1e-7) * (D_OUT * 1e-7)
+
+    def _set_props(smm, p):
+        for prop, val in [("Eg0", p["Eg"]), ("chi0", p["chi"]),
+                          ("Nc", p["Nc"]), ("Nv", p["Nv"]),
+                          ("mun", p["mun"]), ("mup", p["mup"])]:
+            smm.set(prop + "_mat", "userdef")
+            smm.set(prop, val)
+        smm.set("epsilonr_mat", "userdef")
+        _try_set(smm, [("epsilonr", [p["epsr"]]), ("epsilonr", p["epsr"])], log, "smm.epsr")
+
+    _set_props(j.physics("semi").feature("smm1"), mats["absorber"])  # 기본(전역) = 흡수층
+    smm_s = semi.create("smm_s", "SemiconductorMaterialModel", 2)
+    smm_s.selection().named("d_sno2")
+    _set_props(smm_s, mats["sno2"])
+    smm_n = semi.create("smm_n", "SemiconductorMaterialModel", 2)
+    smm_n.selection().named("d_niox")
+    _set_props(smm_n, mats["niox"])
+
+    adm_s = semi.create("adm_s", "AnalyticDopingModel", 2)
+    adm_s.selection().named("d_sno2")
+    adm_s.set("impurityType", "donor")
+    adm_s.set("NDc", mats["sno2_nd"])
+    adm_n = semi.create("adm_n", "AnalyticDopingModel", 2)
+    adm_n.selection().named("d_niox")
+    adm_n.set("impurityType", "acceptor")
+    adm_n.set("NAc", mats["niox_na"])
+
+    tar = semi.create("tar1", "TrapAssistedRecombination", 2)  # 전 도메인 (한계 7.5절)
+    tar.set("taun_mat", "userdef")
+    tar.set("taun", taun)
+    tar.set("taup_mat", "userdef")
+    tar.set("taup", taun)
+
+    udg = semi.create("udg1", "UDGeneration", 2)
+    if absorber_sel:
+        udg.selection().named(absorber_sel)
+        udg.set("Gn", "G_ph")
+        udg.set("Gp", "G_ph")
+    else:  # 폴백: 전역 + y-게이트 (CTL 높이 이하에서 0) — 간격부 바닥은 게이트로 못 살림(근사)
+        udg.set("Gn", f"G_ph*(y>{T_SNO2:g}[nm])")
+        udg.set("Gp", f"G_ph*(y>{T_SNO2:g}[nm])")
+        log("  ⚠️ UDG 폴백: y-게이트 근사 (간격부 바닥 20nm 광생성 무시)")
+
+    mc1 = semi.create("mc1", "MetalContact", 1)
+    mc1.selection().named("b_n")          # 접지 (n쪽)
+    mc2 = semi.create("mc2", "MetalContact", 1)
+    mc2.selection().named("b_p")          # V0 (p쪽) → 0→+ 스윕 = 순방향
+    mc2.set("V0", "V0")
+    log("  접점 OK: V0=NiOx 바닥(p), 접지=SnO2 바닥(n) — 이상 옴익 (한계 7.1절)")
+
+    msh = j.mesh().create("mesh1", "geom1")
+    try:
+        msh.create("map1", "Map")
+        log("  메시: Mapped(사각) — 확정 패턴")
+    except Exception as e:
+        log(f"  Mapped 실패 ({type(e).__name__}) — 기본 메시 (수렴 위험)")
+
+    std1 = j.study().create("std1")
+    std1.create("semie", "SemiconductorEquilibrium")
+    std2 = j.study().create("std2")
+    stat = std2.create("stat", "Stationary")
+    stat.set("useparam", "on")
+    stat.set("pname", ["V0"])
+    stat.set("plistarr", [f"range({vcfg['start']},{vcfg['step']},{vcfg['stop']})"])
+    stat.set("punit", ["V"])
+    _try_set(stat, [("sweeptype", "sparse")], log, "stat")
+    _try_set(stat, [("pcontinuation", "V0")], log, "stat")
+    for pn, pv in [("initmethod", "sol"), ("initstudy", "std1"), ("initstudystep", "semie"),
+                   ("notsolmethod", "sol"), ("notstudy", "std1"), ("notstudystep", "semie")]:
+        _try_set(stat, [(pn, pv)], log, "stat.init")
+    return model, area_cm2

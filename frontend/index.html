@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>COMSOL AI 앱</title>
+<style>
+  :root { --b:#2563eb; --bg:#f6f7f9; --card:#fff; --line:#e3e6ea; --mut:#6b7280; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:#111827; }
+  header { background:#111827; color:#fff; padding:12px 20px; display:flex; align-items:center; gap:12px; }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header .sub { color:#9ca3af; font-size:12px; }
+  nav { display:flex; gap:4px; padding:10px 16px 0; }
+  nav button { border:1px solid var(--line); border-bottom:none; background:#eef0f3; padding:8px 14px;
+    border-radius:8px 8px 0 0; cursor:pointer; font-size:13px; }
+  nav button.on { background:var(--card); font-weight:600; }
+  main { padding:16px; max-width:1100px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:0 10px 10px 10px; padding:16px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  button.act { background:var(--b); color:#fff; border:none; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:13px; }
+  button.act:disabled { background:#9ca3af; }
+  button.ghost { background:#fff; border:1px solid var(--line); padding:7px 12px; border-radius:8px; cursor:pointer; font-size:12px; }
+  .badge { padding:2px 8px; border-radius:10px; font-size:11px; }
+  .b-done{background:#dcfce7;color:#166534} .b-running{background:#dbeafe;color:#1e40af}
+  .b-failed{background:#fee2e2;color:#991b1b} .b-queued{background:#f3f4f6;color:#374151}
+  .b-cancelled{background:#fef3c7;color:#92400e}
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  td,th { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; }
+  pre { background:#0b1220; color:#d1e3ff; padding:12px; border-radius:8px; font-size:11.5px;
+    max-height:420px; overflow:auto; white-space:pre-wrap; }
+  .field { margin:8px 0; }
+  .field label { display:block; font-size:12px; color:var(--mut); margin-bottom:3px; }
+  .field input:not([type=radio]):not([type=checkbox]):not([type=file]),.field select { padding:7px 9px; border:1px solid var(--line); border-radius:7px; width:340px; font-size:13px; }
+  .field input[type=radio] { width:auto; margin-right:4px; vertical-align:middle; }
+  .hint { font-size:12px; color:var(--mut); margin-top:8px; line-height:1.6; }
+  .ok{color:#166534} .no{color:#991b1b}
+  img.art { max-width:100%; border:1px solid var(--line); border-radius:8px; margin-top:8px; }
+  h3 { margin:4px 0 10px; font-size:14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>COMSOL AI 앱</h1>
+  <span class="sub">자연어 → 케이스 설정 → 데이터 준비 → 실행 → 결과</span>
+  <span class="sub" id="hstat" style="margin-left:auto"></span>
+</header>
+<nav>
+  <button data-tab="diag" class="on">① 환경 점검</button>
+  <button data-tab="run">② 케이스 설정</button>
+  <button data-tab="data">③ 데이터 준비·실행</button>
+  <button data-tab="jobs">④ 작업·결과</button>
+</nav>
+<main>
+  <div class="card" id="tab-diag">
+    <div class="hint" style="border:1px solid #fde68a;background:#fffbeb;border-radius:8px;padding:10px;margin-bottom:12px">
+      🔑 <b>COMSOL 동글(라이선스 키) 안내</b><br>
+      다음 작업은 실제 COMSOL을 실행하므로 <b>동글이 꽂혀 있어야</b> 합니다:
+      환경 점검 · ③ 실행(local·export 모두) · ④ solved .mph 업로드 후 결과 추출<br>
+      동글 없이 되는 작업: ② 케이스 설정(자연어 포함) · ③ 데이터 준비 · 완료된 결과 열람·다운로드
+    </div>
+    <h3>환경 점검</h3>
+    <div class="row">
+      <button class="act" onclick="runQuick()">빠른 점검 (평소용)</button>
+      <button class="ghost" onclick="runDiag()">전체 점검 (최초 1회·문제 발생 시)</button>
+    </div>
+    <div class="hint" style="margin-top:8px">
+      <b>빠른 점검</b>: 동글·COMSOL 버전, CPU/메모리, 데이터·케이스·AI 모드 상태를 수 초~수십 초에 확인
+      (COMSOL 세션이 꺼져 있으면 기동에 시간이 조금 더 걸립니다)<br>
+      <b>전체 점검</b>: Si 예제 솔브까지 포함한 7종 검증 + 모델 구조 덤프 — 처음 설치했거나 이상 동작 시에만 (결과는 ④ 탭)
+    </div>
+    <div style="border-top:1px dashed var(--line);margin-top:12px;padding-top:10px">
+      <b style="font-size:13px">v2 개발 — 차원 확장 스파이크</b>
+      <div class="hint">2D/3D 빌더의 COMSOL API를 확정하는 검증 실행입니다 (2층 평판 다이오드 1회 솔브 + 구조 덤프, 결과는 ④).
+        성공/실패 로그를 Claude에게 회신해 주세요. 이 검증 통과 후에만 2D/3D 케이스 실행을 신뢰할 수 있습니다.</div>
+      <div class="row" style="margin-top:6px">
+        <button class="ghost" onclick="runSpike(2)">2D 스파이크 실행</button>
+        <button class="ghost" onclick="runSpike(3)">3D 스파이크 실행</button>
+      </div>
+    </div>
+    <pre id="diagLog" hidden></pre>
+  </div>
+
+  <div class="card" id="tab-data" hidden>
+    <h3>입력 데이터 준비</h3>
+    <div class="hint">케이스별로 필요한 데이터 목록입니다. 새 케이스가 추가되면 필요한 데이터 항목이 여기 자동으로 늘어나고,
+      필수 데이터가 없으면 해당 케이스 실행이 안내와 함께 중단됩니다.</div>
+    <div id="dsList">확인 중...</div>
+    <button id="dlogCopy" hidden class="ghost" style="margin-top:8px" onclick="copyDlog()">📋 로그 복사 (Claude에게 붙여넣기용)</button>
+    <pre id="dlog" hidden></pre>
+    <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
+      <h3>실행</h3>
+      <div id="runInfo" class="hint">케이스를 먼저 선택하세요 (② 탭)</div>
+      <div class="row" style="margin-top:6px">
+        <button class="act" id="runBtn" onclick="runCase()">실행</button>
+        <label class="hint" style="margin-top:0">차원
+          <select id="dimSel" style="width:auto;padding:5px 8px;border:1px solid var(--line);border-radius:6px">
+            <option value="1">1D (검증됨)</option>
+            <option value="2">2D 평판 (검증됨 — 1D 대조 편차 ~1%)</option>
+            <option value="3">3D 평판 (검증됨 — 1D 대조 편차 ~1%)</option>
+          </select>
+        </label>
+        <span class="hint">local: 이 PC에서 솔브 (unsolved 전부 생성 후 솔브 — 도중에 내려받아 다른 컴퓨터 병렬 솔브 가능) / export: unsolved만 반출 · 2D/3D 평판은 1D와 같은 지표가 나와야 정상(빌더 검증용)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="tab-run" hidden>
+    <h3>케이스 설정</h3>
+    <div class="field" style="margin-bottom:14px">
+      <label>자연어로 설명하면 AI가 케이스를 고르고 아래 폼을 채웁니다</label>
+      <textarea id="nlText" rows="2" style="width:100%;max-width:640px;padding:8px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-family:inherit"
+        placeholder="예: 페로브스카이트 태양전지 두께를 300에서 800나노까지 100 간격으로 바꾸며 효율 변화를 보고 싶어"></textarea>
+      <div class="row" style="margin-top:6px">
+        <label class="hint"><input type="radio" name="nlmode" value="paste" checked onchange="nlModeChanged()"> 복붙 (claude.ai 등 구독 챗 — 키 불필요)</label>
+        <label class="hint"><input type="radio" name="nlmode" value="api" onchange="nlModeChanged()"> API 자동</label>
+      </div>
+      <div id="nlApiRow" class="row" style="margin-top:6px" hidden>
+        <button class="act" id="nlBtn" onclick="nlPropose()">AI 제안</button>
+        <span class="hint" id="nlStatus"></span>
+      </div>
+      <div id="nlPasteRow" style="margin-top:6px">
+        <div class="row">
+          <button class="act" onclick="nlMakePrompt()">기존 케이스 사용 프롬프트 생성</button>
+          <button class="act" style="background:#7c3aed" onclick="nlMakeCasePrompt()">새 케이스 만들기 프롬프트 생성</button>
+          <span class="hint" id="nlCopyMsg">프롬프트를 생성한 뒤 [복사]해서 구독 챗에 붙여넣고, AI의 답변을 아래 ②에 붙여넣으세요</span>
+        </div>
+        <div id="nlPromptBox" hidden style="margin-top:6px;position:relative;max-width:640px">
+          <button class="ghost" onclick="copyPrompt()" style="position:absolute;top:6px;right:6px;background:rgba(255,255,255,.95)">📋 복사</button>
+          <textarea id="nlPrompt" rows="5" readonly style="width:100%;padding:8px 74px 8px 8px;border:1px solid var(--line);border-radius:7px;font-size:11px;font-family:monospace;box-sizing:border-box"></textarea>
+        </div>
+        <div class="field" style="margin-top:6px">
+          <label>② AI 응답 붙여넣기 (JSON 포함 전체)</label>
+          <textarea id="nlPaste" rows="4" style="width:100%;max-width:640px;padding:8px;border:1px solid var(--line);border-radius:7px;font-size:12px;font-family:monospace"></textarea>
+          <div class="row" style="margin-top:4px">
+            <button class="act" onclick="nlApply()">적용 (기존 케이스)</button>
+            <button class="ghost" onclick="nlCaseApply()">초안 적용 (새 케이스)</button>
+          </div>
+        </div>
+      </div>
+      <div id="nlResult" class="hint" hidden style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px"></div>
+      <div id="draftPanel" hidden style="border:1px solid #c7d2fe;background:#eef2ff;border-radius:8px;padding:10px;margin-top:8px;font-size:13px"></div>
+    </div>
+    <div class="field"><label>케이스</label>
+      <div class="row">
+        <select id="caseSel" onchange="renderSchema()"></select>
+        <button class="ghost" onclick="deleteCase()" title="생성 모드로 만든 데이터 케이스만 삭제됩니다 (보관함 이동, 복구 가능)">🗑 케이스 삭제</button>
+      </div>
+    </div>
+    <div id="caseDesc" class="hint"></div>
+    <div id="caseData" class="hint" style="margin-top:4px"></div>
+    <div id="schema"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="act" onclick="document.querySelector('nav button[data-tab=&quot;data&quot;]').click()">다음: ③ 데이터 확인·실행 →</button>
+      <span class="hint">설정이 끝나면 ③에서 필요 데이터를 확인한 뒤 실행합니다</span>
+    </div>
+  </div>
+
+  <div class="card" id="tab-jobs" hidden>
+    <h3>작업 목록</h3>
+    <div id="jobsList" class="hint">불러오는 중...</div>
+    <div id="jobDetail" hidden>
+      <h3 style="margin-top:16px">작업 상세: <span id="jdId"></span>
+        <button class="ghost" onclick="copyLog()">로그 복사</button>
+        <button class="ghost" onclick="refreshDetail()">새로고침</button>
+        <button id="jdCancel" hidden onclick="cancelJob()"
+          style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;border-radius:6px;padding:4px 10px;cursor:pointer">■ 중단</button>
+      </h3>
+      <div id="dongleAlert" hidden style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;border-radius:8px;padding:10px;margin:8px 0;font-size:13px"></div>
+      <div id="jdArts"></div>
+      <div class="field" style="margin-top:8px">
+        <label>다른 컴퓨터에서 솔브한 solved .mph 업로드 → 결과 추출 (재솔브 없음)</label>
+        <input type="file" id="solvedFile" accept=".mph">
+        <button class="ghost" onclick="uploadSolved()">업로드+추출</button>
+      </div>
+      <pre id="jdLog"></pre>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let curJob = null, cases = [];
+let jdLastLog = "", jdLastArtsSig = "", jdLastStatus = "";  // 변경 없으면 다시 안 그림 (깜빡임 방지)
+
+// 탭
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.remove("on"));
+  b.classList.add("on");
+  ["diag","data","run","jobs"].forEach(t => $("#tab-"+t).hidden = (t !== b.dataset.tab));
+  if (b.dataset.tab === "jobs") loadJobs();
+  if (b.dataset.tab === "data") loadData();
+  if (b.dataset.tab === "run") renderSchema();
+});
+
+async function api(path, opt) {
+  const r = await fetch(path, opt);
+  if (!r.ok) throw new Error(await r.text());
+  const ct = r.headers.get("content-type") || "";
+  return ct.includes("json") ? r.json() : r.text();
+}
+
+async function health() {
+  try {
+    const h = await api("/api/health");
+    $("#hstat").textContent = `mph:${h.mph_importable ? "OK" : "없음"} · COMSOL세션:${h.comsol_session ? "on" : "대기"}`;
+  } catch { $("#hstat").textContent = "서버 연결 끊김"; }
+}
+setInterval(health, 5000); health();
+
+// ① 진단
+async function runDiag() {
+  const r = await api("/api/diagnostics", {method:"POST"});
+  openJob(r.job_id);
+}
+let quickTimer = null;
+async function runQuick() {
+  const r = await api("/api/diagnostics/quick", {method:"POST"});
+  const jid = r.job_id;
+  $("#diagLog").hidden = false;
+  $("#diagLog").textContent = "빠른 점검 실행 중...";
+  clearInterval(quickTimer);
+  quickTimer = setInterval(async () => {
+    try {
+      const j = await api(`/api/jobs/${jid}`);
+      $("#diagLog").textContent = await api(`/api/jobs/${jid}/log`);
+      if (j.status === "done" || j.status === "failed") clearInterval(quickTimer);
+    } catch { clearInterval(quickTimer); }
+  }, 1000);
+}
+function updateRunSection(ds) {
+  const c = cases.find(x => x.id === $("#caseSel")?.value);
+  const btn = $("#runBtn");
+  if (!c) {
+    $("#runInfo").textContent = "케이스를 먼저 선택하세요 (② 탭)";
+    if (btn) btn.disabled = true;
+    return;
+  }
+  const need = ds.filter(d => d.required_by.includes(c.id));
+  const lack = need.filter(d => !d.ready);
+  $("#runInfo").innerHTML = `선택된 케이스: <b>${c.name}</b>` +
+    (need.length ? "<br>필요 데이터: " + need.map(d =>
+      `${d.name} <b class="${d.ready?'ok':'no'}">${d.ready?'준비됨':'없음'}</b>`).join(" · ") : "") +
+    (lack.length ? `<br><b style="color:#991b1b">위 데이터를 준비해야 실행할 수 있습니다</b>` : "");
+  if (btn) btn.disabled = lack.length > 0;
+}
+
+// ② 데이터
+async function loadData() {
+  const [list, ups] = await Promise.all([api("/api/data/status"), api("/api/data/uploads")]);
+  updateRunSection(list);
+  $("#dsList").innerHTML = list.map(d => {
+    const m = d.meta;
+    const arch = ups[d.id] || [];
+    const archHtml = arch.length ? `
+      <details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px">📦 업로드 보관함 (${arch.length}개) — 원본 보존, 클릭해서 재적용</summary>
+        ${arch.map(f => `<div class="row" style="font-size:12px;margin-top:4px;align-items:center">
+          <span>${f.name} (${fmtSize(f.size)})</span>
+          <button class="ghost" onclick="dsApplyArchived('${d.id}','${f.name}')">이 파일 적용</button>
+          <a class="ghost" style="text-decoration:none" href="/api/data/uploads/${d.id}/${encodeURIComponent(f.name)}" download>⬇ 원본</a>
+        </div>`).join("")}
+      </details>` : "";
+    const hist = d.ready && m ? `
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:6px 8px;margin-top:6px;font-size:12px">
+        ✔ <b>${m.filename}</b> — ${m.origin}, ${m.saved_at} (${m.rows}행)${m.detail ? " · " + m.detail : ""}
+        ${(m.warnings||[]).length ? `<br><span style="color:#b45309">⚠️ ${m.warnings.join("<br>⚠️ ")}</span>` : ""}
+        <br><span class="hint">파일은 저장되어 유지됩니다 — 같은 데이터면 다시 업로드할 필요 없음. 교체하려면 새 파일 업로드</span>
+      </div>` : (d.ready ? `
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:6px 8px;margin-top:6px;font-size:12px">
+        ✔ 준비됨 (${d.rows}행) — 이력 정보 없음(기본 동봉본 또는 이전 버전에서 준비)</div>` : "");
+    return `
+    <div style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:10px">
+      <b>${d.name}</b>
+      <span class="badge ${d.ready?'b-done':'b-failed'}">${d.ready?`준비됨 (${d.rows}행)`:'없음'}</span><br>
+      <span class="hint">${d.format}<br>사용 케이스: ${d.required_by.join(", ")} · ${d.note}
+      · <a href="${d.source_url}" target="_blank">데이터 출처/수동 다운로드</a></span>
+      ${hist}
+      ${archHtml}
+      <div class="row" style="margin-top:6px">
+        ${d.auto_fetch ? `<button class="ghost" onclick="dsFetch('${d.id}')">자동 다운로드 시도</button>` : ""}
+        <input type="file" id="dsf_${d.id}" style="font-size:12px">
+        <button class="ghost" onclick="dsUpload('${d.id}')">업로드</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+function copyDlog() {
+  navigator.clipboard.writeText($("#dlog").textContent)
+    .then(() => alert("로그가 복사되었습니다. Claude에게 붙여넣어 주세요."));
+}
+function dlogShow(text) {
+  $("#dlog").hidden = false; $("#dlogCopy").hidden = false;
+  $("#dlog").textContent = text;
+}
+async function dsFetch(id) {
+  dlogShow("다운로드 시도 중...");
+  const r = await api(`/api/data/fetch/${id}`, {method:"POST"});
+  dlogShow(r.logs.join("\n"));
+  loadData();
+}
+async function dsApplyArchived(id, name) {
+  dlogShow("보관 파일 적용 중...");
+  const r = await api(`/api/data/uploads/${id}/apply`, {method:"POST",
+    headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
+  dlogShow(r.logs.join("\n"));
+  loadData();
+}
+async function dsUpload(id) {
+  const f = document.getElementById("dsf_" + id).files[0];
+  if (!f) return alert("파일을 선택하세요");
+  const fd = new FormData(); fd.append("file", f);
+  const r = await api(`/api/data/upload/${id}`, {method:"POST", body:fd});
+  dlogShow(r.logs.join("\n"));
+  loadData();
+}
+
+// 케이스 생성 모드: 프롬프트 → 초안 → 검토 → 등록
+let curDraft = null;
+async function nlMakeCasePrompt() {
+  const text = $("#nlText").value.trim();
+  if (!text) return alert("먼저 위 칸에 만들고 싶은 케이스를 자연어로 적어주세요");
+  const r = await api("/api/nl/case_prompt", {method:"POST",
+    headers:{"Content-Type":"application/json"}, body:JSON.stringify({text})});
+  $("#nlPromptBox").hidden = false;
+  $("#nlPrompt").value = r.prompt;
+  $("#nlCopyMsg").textContent = "새 케이스 만들기 프롬프트 생성됨 — [📋 복사] 후 구독 챗에 붙여넣고, 응답 전체를 ②에 붙여넣은 뒤 '초안 적용 (새 케이스)'을 누르세요";
+}
+async function nlCaseApply() {
+  const t = $("#nlPaste").value.trim();
+  if (!t) return alert("②에 AI 응답을 붙여넣어 주세요");
+  let r;
+  try {
+    r = await api("/api/nl/case_apply", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body:JSON.stringify({response_text:t})});
+  } catch (e) { return alert("초안 해석 실패: " + e.message); }
+  curDraft = r.draft;
+  renderDraft(r);
+}
+function renderDraft(r) {
+  const d = r.draft || {}, v = r.validation || {ok:false, problems:["검증 결과 없음"], needs:[]};
+  const c = d.case || {};
+  const box = $("#draftPanel");
+  box.hidden = false;
+  let h = `<b>🧩 새 케이스 초안: ${c.name || "(이름 없음)"}</b> <span class="hint">(${c.id || "?"})</span>`;
+  if (d.rationale) h += `<div class="hint" style="margin-top:2px">${d.rationale}</div>`;
+  if ((c.layers || []).length) {
+    h += `<table style="max-width:640px;margin-top:6px"><thead><tr><th>레이어</th><th>재료</th><th>두께[nm]</th><th>도핑</th></tr></thead><tbody>` +
+      c.layers.map(l => `<tr><td>${l.name}${l.absorber ? " ☀흡수층" : ""}</td><td>${l.material}</td>` +
+        `<td>${l.thickness_nm}</td><td>${l.doping ? l.doping.type + " " + l.doping.conc : "-"}</td></tr>`).join("") +
+      `</tbody></table>`;
+  }
+  if (c.grid) h += `<div class="hint" style="margin-top:4px">스윕: ${c.grid.x?.label || c.grid.x?.param} × ${c.grid.y?.label || c.grid.y?.param}</div>`;
+  const nm = d.materials_new || [];
+  if (nm.length) {
+    h += `<div style="margin-top:6px"><b>새 재료 ${nm.length}개</b> — AI가 제안한 문헌값입니다. <u>등록 전 출처(아래)를 한 번 확인하세요</u>:</div>`;
+    for (const m of nm) {
+      h += `<div style="margin:4px 0 0 8px;font-size:12px"><b>${m.id}</b> (${m.name || ""}): ` +
+        Object.entries(m.props || {}).map(([k, x]) => `${k}=${x}`).join(", ") + `</div>`;
+    }
+    const refs = d.references_new || {};
+    if (Object.keys(refs).length)
+      h += `<div style="margin:4px 0 0 8px;font-size:12px">출처: ` +
+        Object.entries(refs).map(([rid, x]) => `${rid} — ${x.citation} <a href="${x.url}" target="_blank">링크</a>`).join("<br>") + `</div>`;
+  }
+  const probs = v.problems || [], needs = v.needs || [];
+  if (probs.length) h += `<div style="color:#991b1b;margin-top:6px">✖ 구조 문제:<br>· ${probs.join("<br>· ")}</div>`;
+  if (needs.length) h += `<div style="color:#b45309;margin-top:6px">⚠️ 채워야 할 것:<br>· ${needs.join("<br>· ")}` +
+    `<br><span class="hint">→ 챗에서 초안 JSON을 보완해 ②에 다시 붙여넣고 '초안 적용'을 다시 누르세요</span></div>`;
+  if ((d.warnings || []).length) h += `<div class="hint" style="margin-top:4px">주의: ${d.warnings.join(" · ")}</div>`;
+  h += `<div class="row" style="margin-top:8px">` +
+    `<button class="act" ${v.ok ? "" : "disabled"} onclick="registerDraft()">이 케이스 등록</button>` +
+    `<span class="hint">${v.ok ? "등록하면 케이스 목록에 즉시 추가됩니다 (재시작 불필요)" : "문제를 해결해야 등록할 수 있습니다"}</span></div>` +
+    `<pre id="draftLog" hidden style="font-size:11px;margin-top:6px"></pre>`;
+  box.innerHTML = h;
+}
+async function registerDraft() {
+  if (!curDraft) return;
+  let r;
+  try {
+    r = await api("/api/cases/register", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body:JSON.stringify({draft:curDraft})});
+  } catch (e) { return alert("등록 실패: " + e.message); }
+  const lg = $("#draftLog");
+  if (lg) { lg.hidden = false; lg.textContent = (r.logs || []).concat(r.problems || []).join("\n"); }
+  if (r.ok) {
+    await loadCases();
+    $("#caseSel").value = r.case.id;
+    renderSchema();
+    alert("✔ 케이스 등록 완료: " + r.case.name + "\n아래 폼을 확인하고 ③에서 실행하세요.");
+  }
+}
+
+// ③ 케이스
+async function loadCases() {
+  cases = await api("/api/cases");
+  $("#caseSel").innerHTML = cases.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+  renderSchema();
+}
+function renderSchema() {
+  const c = cases.find(x => x.id === $("#caseSel").value);
+  if (!c) return;
+  $("#caseDesc").textContent = c.desc;
+  $("#schema").innerHTML = c.schema.map(f => {
+    if (f.type === "select")
+      return `<div class="field"><label>${f.label}</label><select id="f_${f.key}">` +
+        f.options.map(o => `<option ${o===f.default?"selected":""}>${o}</option>`).join("") + `</select></div>`;
+    return `<div class="field"><label>${f.label}</label><input id="f_${f.key}" value="${f.default}"></div>`;
+  }).join("");
+  updateCaseData(c);
+}
+async function updateCaseData(c) {
+  try {
+    const ds = await api("/api/data/status");
+    const need = ds.filter(d => d.required_by.includes(c.id));
+    if (!need.length) { $("#caseData").textContent = ""; return; }
+    const lack = need.some(d => !d.ready);
+    $("#caseData").innerHTML = "필요 데이터: " + need.map(d =>
+      `${d.name} <b class="${d.ready?'ok':'no'}">${d.ready?'준비됨':'없음'}</b>`).join(" · ") +
+      (lack ? ` — <a href="#" onclick="document.querySelector('nav button[data-tab=&quot;data&quot;]').click();return false">③ 데이터 준비로 이동</a>` : "");
+  } catch { $("#caseData").textContent = ""; }
+}
+function nlMode() { return document.querySelector('input[name="nlmode"]:checked').value; }
+function nlModeChanged() {
+  const paste = nlMode() === "paste";
+  $("#nlApiRow").hidden = paste;
+  $("#nlPasteRow").hidden = !paste;
+}
+async function nlStatusCheck() {
+  try {
+    const s = await api("/api/nl/status");
+    $("#nlStatus").textContent = s.ready ? `모델: ${s.model}` : `비활성: ${s.reason}`;
+    $("#nlBtn").disabled = !s.ready;
+  } catch { $("#nlStatus").textContent = "상태 확인 실패"; }
+}
+function applyProposal(r) {
+  const box = $("#nlResult"); box.hidden = false;
+  let html = `<b>${r.case_id === "none" ? "지원 범위 밖 요청" : "제안: " + r.case_id}</b>` +
+    ` <span class="badge ${r.confidence==="high"?"b-done":r.confidence==="medium"?"b-queued":"b-failed"}">확신도 ${r.confidence}</span>` +
+    ` <span class="badge b-queued">${r.source === "api" ? "API" : "복붙"}</span><br>${r.rationale}`;
+  if (r.assumed_defaults?.length) html += `<br><b>기본값 사용:</b> ${r.assumed_defaults.join(" · ")}`;
+  if (r.missing?.length) html += `<br><b style="color:#991b1b">확인 필요:</b> ${r.missing.join(" · ")}`;
+  if (r.warnings?.length) html += `<br><b style="color:#92400e">주의:</b> ${r.warnings.join(" · ")}`;
+  if (r.case_id === "none") html += `<br><b style="color:#1e40af">→ 기존 케이스로 안 되는 요청입니다. 1D 수직 스택이라면 [①-B 새 케이스 초안 프롬프트]로 새 케이스를 만들어 보세요. (2D/3D는 새 빌더 개발 필요 — Claude에게 요청)</b>`;
+  html += `<br><span style="color:#9ca3af">${r.usage ? `토큰 ${r.usage.input_tokens}+${r.usage.output_tokens} · ` : ""}아래 폼을 확인·수정한 뒤 실행을 누르세요</span>`;
+  box.innerHTML = html;
+  if (r.case_id !== "none") {
+    $("#caseSel").value = r.case_id;
+    renderSchema();
+    for (const [k, v] of Object.entries(r.params || {})) {
+      const el = document.getElementById("f_" + k);
+      if (el) el.value = v;
+    }
+  }
+}
+async function nlPropose() {
+  const text = $("#nlText").value.trim();
+  if (!text) return alert("문장을 입력하세요");
+  $("#nlBtn").disabled = true; $("#nlStatus").textContent = "AI 분석 중...";
+  try {
+    const r = await api("/api/nl/propose", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body:JSON.stringify({text})});
+    applyProposal(r);
+  } catch (e) {
+    $("#nlResult").hidden = false;
+    $("#nlResult").textContent = "오류: " + e.message;
+  } finally {
+    $("#nlBtn").disabled = false;
+    nlStatusCheck();
+  }
+}
+async function nlMakePrompt() {
+  const text = $("#nlText").value.trim();
+  if (!text) return alert("먼저 위 칸에 요청 문장을 입력하세요");
+  const r = await api("/api/nl/prompt", {method:"POST",
+    headers:{"Content-Type":"application/json"}, body:JSON.stringify({text})});
+  $("#nlPrompt").value = r.prompt;
+  $("#nlPromptBox").hidden = false;
+  $("#nlCopyMsg").textContent = "기존 케이스용 프롬프트 생성됨 — [📋 복사] 후 구독 챗에 붙여넣고, 답변을 ②에 붙여넣으세요";
+}
+async function copyPrompt() {
+  try {
+    await navigator.clipboard.writeText($("#nlPrompt").value);
+    $("#nlCopyMsg").textContent = "복사되었습니다 — 구독 챗에 붙여넣고, AI 답변을 ②에 붙여넣으세요";
+  } catch {
+    alert("자동 복사 실패 — 프롬프트 박스에서 직접 선택해 복사해주세요");
+  }
+}
+async function nlApply() {
+  const raw = $("#nlPaste").value.trim();
+  if (!raw) return alert("AI 응답을 붙여넣으세요");
+  try {
+    const r = await api("/api/nl/apply", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body:JSON.stringify({response_text: raw})});
+    applyProposal(r);
+  } catch (e) {
+    $("#nlResult").hidden = false;
+    $("#nlResult").textContent = "적용 실패: " + e.message;
+  }
+}
+
+async function runSpike(dim) {
+  const r = await api(`/api/diagnostics/spike/${dim}`, {method:"POST"});
+  openJob(r.job_id);
+}
+async function runCase() {
+  const c = cases.find(x => x.id === $("#caseSel").value);
+  const params = {};
+  c.schema.forEach(f => params[f.key] = $("#f_"+f.key).value);
+  params.dim = $("#dimSel").value;  // 1=검증됨 / 2·3=평판 검증 중
+  try {
+    const r = await api(`/api/cases/${c.id}/run`, {method:"POST",
+      headers:{"Content-Type":"application/json"}, body:JSON.stringify(params)});
+    openJob(r.job_id);
+  } catch (e) {  // 작업 생성 자체가 실패한 경우 — ③에서 바로 복사 가능하게 기록
+    $("#dlog").hidden = false;
+    $("#dlog").textContent = `[실행 요청 실패] 케이스 ${c.id}\n${e.message}\n` +
+      `파라미터: ${JSON.stringify(params)}\n→ 위 내용을 '로그 복사'로 복사해 Claude에게 붙여넣으세요`;
+    document.getElementById("dlogCopy").hidden = false;
+  }
+}
+async function deleteCase() {
+  const id = $("#caseSel").value;
+  if (!id) return;
+  if (!confirm(`케이스 '${id}'를 삭제할까요?\n(cases/_deleted 보관함으로 이동 — 복구 가능. 실행 이력·재료·참고문헌은 남습니다)`)) return;
+  try {
+    const r = await api(`/api/cases/${id}`, {method:"DELETE"});
+    alert(r.message);
+    await loadCases();
+  } catch (e) { alert("삭제 불가: " + e.message); }
+}
+
+// ④ 작업
+function _jobRow(j) {
+  const t = j.id.slice(9, 15).replace(/(..)(..)(..)/, "$1:$2:$3");
+  const dim = j.params.dim && String(j.params.dim) !== "1" ? ` (${j.params.dim}D)` : "";
+  return `<tr><td style="white-space:nowrap">${t}</td>` +
+    `<td>${j.kind}${j.params.case_id ? ": " + j.params.case_id : ""}${dim}</td>` +
+    `<td><span class="badge b-${j.status}">${j.status}</span></td>` +
+    `<td>${(j.message || "").slice(0, 60)}</td>` +
+    `<td><button class="ghost" onclick="openJob('${j.id}')">보기</button></td></tr>`;
+}
+async function loadJobs() {
+  const js = await api("/api/jobs");
+  // 열림 상태 보존 (재렌더 시 사용자가 펼친 날짜 유지)
+  const openSet = new Set([...document.querySelectorAll("#jobsList details[data-d]")]
+    .filter(x => x.open).map(x => x.dataset.d));
+  const hadAny = document.querySelectorAll("#jobsList details[data-d]").length > 0;
+  const groups = {};
+  for (const j of js) (groups[j.id.slice(0, 8)] ??= []).push(j);
+  const dates = Object.keys(groups).sort().reverse();
+  const RECENT = 8;  // 펼친 그룹에서 기본 표시 건수
+  $("#jobsList").innerHTML = dates.map((d, di) => {
+    const g = groups[d];
+    const label = `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}  ·  ${g.length}건`;
+    const head = `<table style="margin-top:4px"><thead><tr><th>시각</th><th>종류</th><th>상태</th><th>메시지</th><th></th></tr></thead><tbody>`;
+    let body = head + g.slice(0, RECENT).map(_jobRow).join("") + `</tbody></table>`;
+    if (g.length > RECENT) {
+      body += `<details style="margin:4px 0 0 8px"><summary style="cursor:pointer;font-size:12px;color:#6b7280">이전 ${g.length - RECENT}건 더 보기</summary>` +
+        head + g.slice(RECENT).map(_jobRow).join("") + `</tbody></table></details>`;
+    }
+    const open = hadAny ? openSet.has(d) : di === 0;  // 최초엔 최신 날짜만 펼침
+    return `<details data-d="${d}" ${open ? "open" : ""} style="margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:6px 10px">` +
+      `<summary style="cursor:pointer;font-weight:600;font-size:13px">📅 ${label}</summary>${body}</details>`;
+  }).join("") || `<span class="hint">작업 없음</span>`;
+}
+function openJob(jid) {
+  curJob = jid;
+  jdLastLog = ""; jdLastArtsSig = ""; jdLastStatus = "";  // 새 작업 → 강제 갱신
+  document.querySelector('nav button[data-tab="jobs"]').click();
+  $("#jobDetail").hidden = false; $("#jdId").textContent = jid;
+  refreshDetail();
+}
+async function refreshDetail() {
+  if (!curJob) return;
+  try {
+    const j = await api(`/api/jobs/${curJob}`);
+    const needDongle = j.status === "failed" && /동글|라이선스|license/i.test(j.message || "");
+    $("#dongleAlert").hidden = !needDongle;
+    if (needDongle) $("#dongleAlert").innerHTML =
+      "🔑 <b>동글이 필요합니다.</b> 이 작업은 COMSOL을 실행해야 하는데 라이선스를 얻지 못했습니다. " +
+      "USB 동글을 꽂은 뒤 같은 작업을 다시 실행해 주세요.<br><span style='font-size:12px'>" +
+      (j.message || "") + "</span>";
+    $("#jdCancel").hidden = !(j.status === "running" || j.status === "queued");
+    if (j.status !== jdLastStatus) { jdLastStatus = j.status; loadJobs(); }  // 상태 바뀔 때만 목록 갱신
+  } catch {}
+  const log = await api(`/api/jobs/${curJob}/log`);
+  if (log !== jdLastLog) { jdLastLog = log; $("#jdLog").textContent = log; }
+  const arts = await api(`/api/jobs/${curJob}/artifacts`);
+  const sig = arts.map(a => a.name + ":" + a.size + ":" + (a.mtime || 0)).join("|");
+  if (sig !== jdLastArtsSig) { jdLastArtsSig = sig; renderArtifacts(arts); }
+}
+function plotCtrl(fn) {
+  const id = fn.replace(/\W/g, "_");
+  return `<div class="row" style="margin-top:4px;font-size:12px;align-items:center;flex-wrap:wrap">
+    <span>X</span><input id="px0_${id}" placeholder="min" style="width:54px"><span>~</span><input id="px1_${id}" placeholder="max" style="width:54px">
+    <span style="margin-left:6px">Y</span><input id="py0_${id}" placeholder="min" style="width:54px"><span>~</span><input id="py1_${id}" placeholder="max" style="width:54px">
+    <span style="margin-left:6px">범례</span><select id="plg_${id}">
+      <option value="best">자동</option><option value="upper right">오른쪽 위</option>
+      <option value="upper left">왼쪽 위</option><option value="lower right">오른쪽 아래</option>
+      <option value="lower left">왼쪽 아래</option><option value="center right">오른쪽 중앙</option>
+      <option value="outside">그래프 밖</option></select>
+    <button class="ghost" onclick="replotImg('${fn}','${id}')">적용</button>
+    <span class="hint">빈칸 = 자동</span>
+  </div>`;
+}
+async function replotImg(fn, id) {
+  const g = k => (document.getElementById(k + "_" + id) || {value: ""}).value.trim();
+  try {
+    await api(`/api/jobs/${curJob}/replot`, {method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({fname: fn, xmin: g("px0"), xmax: g("px1"),
+                            ymin: g("py0"), ymax: g("py1"),
+                            legend: (document.getElementById("plg_" + id) || {value: "best"}).value})});
+  } catch (e) { return alert("재플롯 실패: " + e.message); }
+  refreshDetail();  // mtime 변경 → 그림 자동 갱신
+}
+function fmtSize(b) {
+  return b > 1048576 ? (b / 1048576).toFixed(1) + "MB" : Math.max(1, Math.round(b / 1024)) + "KB";
+}
+function artLink(a, label) {
+  if (!a) return `<span class="hint">–</span>`;
+  return `<a class="ghost" style="text-decoration:none" href="/api/jobs/${curJob}/artifacts/${a.name}" download>` +
+         `⬇ ${label || a.name} (${fmtSize(a.size)})</a>`;
+}
+function renderArtifacts(arts) {
+  const imgs = arts.filter(a => a.name.endsWith(".png"));
+  const csvs = arts.filter(a => a.name.endsWith(".csv"));
+  const mphs = arts.filter(a => a.name.endsWith(".mph"));
+  const used = new Set([...imgs, ...csvs, ...mphs].map(a => a.name));
+  const others = arts.filter(a => !used.has(a.name));
+  let h = "";
+  const hasCurves = arts.some(a => a.name === "jv_curves.csv");
+  if (imgs.length) {
+    h += `<h4 style="margin:12px 0 6px">결과 그림</h4>`;
+    h += imgs.map(a =>
+      `<div style="margin-bottom:12px">` +
+      `<img class="art" src="/api/jobs/${curJob}/artifacts/${a.name}?v=${a.size}_${a.mtime || 0}">` +
+      ((hasCurves && a.name.startsWith("jv")) ? plotCtrl(a.name) : "") +
+      `<div class="row" style="margin-top:4px">${artLink(a)}</div></div>`).join("");
+  }
+  if (csvs.length) {
+    h += `<h4 style="margin:12px 0 6px">요약 데이터</h4><div class="row">` +
+         csvs.map(a => artLink(a)).join(" ") + `</div>`;
+  }
+  if (mphs.length) {
+    const pairs = {};
+    for (const m of mphs) {
+      let base, kind;
+      if (m.name.endsWith("_unsolved.mph")) { base = m.name.slice(0, -13); kind = "unsolved"; }
+      else if (m.name.endsWith("_solved.mph")) { base = m.name.slice(0, -11); kind = "solved"; }
+      else { base = m.name.slice(0, -4); kind = "plain"; }
+      (pairs[base] ??= {})[kind] = m;
+    }
+    h += `<h4 style="margin:12px 0 6px">COMSOL 모델 파일 (.mph)</h4>` +
+      `<table style="max-width:720px"><thead><tr><th>모델</th>` +
+      `<th>unsolved — 오프라인 서버 반출용</th><th>solved — 해 포함, 결과 재추출 가능</th></tr></thead><tbody>` +
+      Object.keys(pairs).sort().map(k => {
+        const p = pairs[k];
+        return `<tr><td>${k}</td><td>${artLink(p.unsolved || p.plain, "다운로드")}</td>` +
+               `<td>${artLink(p.solved, "다운로드")}</td></tr>`;
+      }).join("") + `</tbody></table>`;
+  }
+  if (others.length) {
+    h += `<h4 style="margin:12px 0 6px">기타</h4><div class="row">` +
+         others.map(a => artLink(a)).join(" ") + `</div>`;
+  }
+  $("#jdArts").innerHTML = h || `<span class="hint">산출물 없음</span>`;
+}
+setInterval(() => {  // 진행 중 작업만 폴링 — 완료/실패/중단 후에는 화면 고정 (스크롤 유지)
+  if (curJob && !$("#tab-jobs").hidden &&
+      !["done", "failed", "cancelled"].includes(jdLastStatus))
+    refreshDetail();
+}, 3000);
+async function cancelJob() {
+  if (!curJob) return;
+  if (!confirm("실행을 중단할까요?\n진행 중인 조합이 끝나는 대로 멈추고, 완료분 결과는 보존됩니다.")) return;
+  const r = await api(`/api/jobs/${curJob}/cancel`, {method:"POST"});
+  alert(r.message || "요청됨");
+  jdLastStatus = "";  // 강제 갱신 재개
+  refreshDetail();
+}
+function copyLog() {
+  navigator.clipboard.writeText($("#jdLog").textContent)
+    .then(() => alert("로그가 복사되었습니다. Claude에게 붙여넣어 주세요."));
+}
+async function uploadSolved() {
+  const f = $("#solvedFile").files[0];
+  if (!f) return alert(".mph 파일을 선택하세요");
+  const fd = new FormData(); fd.append("file", f);
+  const r = await api(`/api/jobs/${curJob}/upload_solved`, {method:"POST", body:fd});
+  openJob(r.job_id);
+}
+
+loadCases(); loadJobs(); nlStatusCheck(); nlModeChanged();
+</script>
+</body>
+</html>
