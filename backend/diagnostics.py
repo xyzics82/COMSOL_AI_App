@@ -561,6 +561,184 @@ def spike_wo2(jid, params, log, get_client):
     log(">> WO-2 완료 — Claude가 결과를 분석합니다 <<")
 
 
+def spike_wo3(jid, params, log, get_client):
+    """O-3: λ 스윕 → Qh(x,y) 노드 평가 → AM1.5 가중 G(x,y) 합성 (슬랩, Beer-Lambert 대조).
+
+    정규화: 각 λ에서 ∫G_λ dA = A(λ)·Φ(λ)·W 가 되도록 스케일 (A=ewfd.Atotal, Φ=AM1.5
+    광자속[1/m²s], W=주기 폭). 검증: Jsc,opt = q·ΣA(λ)Φ(λ)Δλ 와 Beer-Lambert 대비 로그.
+    """
+    import cmath
+    import time
+
+    import numpy as np
+
+    from . import data_prep, jobs
+    from .stack_builder import _try_set
+    nlam = int(params.get("nlam", 12))
+    client = get_client(log)
+    nk = np.loadtxt(ROOT / "data" / data_prep.dataset("mapbi3_nk")["file"], encoding="utf-8")
+    am = np.loadtxt(ROOT / "data" / data_prep.dataset("am15")["file"], encoding="utf-8")
+    lams = np.linspace(300.0, 850.0, nlam)  # nm
+    dlam = (850.0 - 300.0) / (nlam - 1)
+    log(f"=== WO-3: λ {nlam}점(300-850nm) → G(x,y) 합성, 슬랩 vs Beer-Lambert ===")
+
+    model = client.create("spike_wo3")
+    j = model.java
+    try:
+        j.component().create("comp1", True)
+    except Exception:
+        j.modelNode().create("comp1")
+    comp = j.component("comp1")
+    geom = comp.geom().create("geom1", 2)
+    geom.lengthUnit("nm")
+    W, y0, y1, y2, y3 = 250.0, 0.0, 500.0, 1300.0, 1800.0
+    t_abs_m = (y2 - y1) * 1e-9
+    for tag, a, b in [("rb", y0, y1), ("rp", y1, y2), ("rt", y2, y3)]:
+        rct = geom.create(tag, "Rectangle")
+        rct.set("size", [f"{W:g}", f"{b - a:g}"])
+        rct.set("pos", ["0", f"{a:g}"])
+    geom.run()
+
+    def box(tag, edim, x0, x1, ylo, yhi):
+        s = j.selection().create(tag, "Box")
+        s.set("entitydim", str(edim))
+        s.set("xmin", f"{x0:g}[nm]")
+        s.set("xmax", f"{x1:g}[nm]")
+        s.set("ymin", f"{ylo:g}[nm]")
+        s.set("ymax", f"{yhi:g}[nm]")
+        s.set("condition", "inside")
+    eps = 0.5
+    box("d_pvk", 2, -eps, W + eps, y1 - eps, y2 + eps)
+    box("b_top", 1, -eps, W + eps, y3 - eps, y3 + eps)
+    box("b_bot", 1, -eps, W + eps, y0 - eps, y0 + eps)
+    box("b_l", 1, -eps, eps, y0 - eps, y3 + eps)
+    box("b_r", 1, W - eps, W + eps, y0 - eps, y3 + eps)
+    uni = j.selection().create("b_lr", "Union")
+    uni.set("entitydim", "1")
+    uni.set("input", ["b_l", "b_r"])
+
+    ewfd = comp.physics().create("ewfd", "ElectromagneticWavesFrequencyDomain", "geom1")
+    wee1 = j.physics("ewfd").feature("wee1")
+    wee1.set("DisplacementFieldModel", "RefractiveIndex")
+    for pn, pv in [("n_mat", "userdef"), ("n", ["1"]), ("ki_mat", "userdef"), ("ki", ["0"])]:
+        wee1.set(pn, pv)
+    wee2 = ewfd.create("wee2", "WaveEquationElectric", 2)
+    wee2.selection().named("d_pvk")
+    wee2.set("DisplacementFieldModel", "RefractiveIndex")
+    wee2.set("n_mat", "userdef")
+    wee2.set("ki_mat", "userdef")
+    pp1 = ewfd.create("pport1", "Port", 1)
+    pp1.selection().named("b_top")
+    pp1.set("PortType", "Periodic")
+    _try_set(pp1, [("PortExcitation", "on")], log, "pport1")
+    pp2 = ewfd.create("pport2", "Port", 1)
+    pp2.selection().named("b_bot")
+    pp2.set("PortType", "Periodic")
+    fpc = ewfd.create("fpc1", "PeriodicCondition", 1)
+    fpc.selection().named("b_lr")
+    _try_set(fpc, [("PeriodicType", "Floquet")], log, "fpc1")
+    _try_set(fpc, [("Floquet_source", "FromPeriodicPort")], log, "fpc1")
+    msh = j.mesh().create("mesh1", "geom1")
+    try:
+        msh.feature("size").set("custom", "on")
+        msh.feature("size").set("hmax", "20[nm]")
+    except Exception:
+        pass
+    std1 = j.study().create("std1")
+    fr = std1.create("freq", "Frequency")
+    _try_set(fr, [("punit", "Hz"), ("punit", ["Hz"])], log, "freq.punit")  # ⚠️ 필수 — 기본 단위가 Hz 아님
+    log("  모델 골격 OK (WO-2 확정 패턴) — λ 루프 시작")
+
+    h_c = 6.62607015e-34 * 299792458.0
+    q_e = 1.602176634e-19
+    X = Y = None
+    Gsum = None
+    qh_expr = None
+    j_opt_wave = 0.0
+    j_opt_bl = 0.0
+    for li, lam_nm in enumerate(lams, 1):
+        n_l = float(np.interp(lam_nm / 1000, nk[:, 0], nk[:, 1]))
+        k_l = float(np.interp(lam_nm / 1000, nk[:, 0], nk[:, 2]))
+        F_l = float(np.interp(lam_nm, am[:, 0], am[:, 1]))  # W/m^2/nm
+        wee2.set("n", [f"{n_l:.6f}"])
+        wee2.set("ki", [f"{k_l:.6f}"])
+        fr.set("plist", [299792458.0 / (lam_nm * 1e-9)])
+        t0 = time.time()
+        model.solve("Study 1")
+        A = float(np.ravel(model.evaluate("ewfd.Atotal"))[0])
+        R_ = float(np.ravel(model.evaluate("ewfd.Rtotal"))[0])
+        T_ = float(np.ravel(model.evaluate("ewfd.Ttotal"))[0])
+        if li == 1:
+            log(f"    진단: R={R_:.4f} T={T_:.4f} (R≈0·T≈1이면 wee2 미적용=전부 공기, "
+                f"R 진동이면 무손실 n만 적용)")
+            try:
+                log(f"    진단: wee2.n = {wee2.getStringArray('n')}, ki = {wee2.getStringArray('ki')}")
+            except Exception as e:
+                log(f"    진단: wee2 값 조회 실패 {type(e).__name__}")
+        if X is None:
+            X = np.ravel(model.evaluate("x"))  # nm 단위 반환 (IBC 스파이크에서 확인)
+            Y = np.ravel(model.evaluate("y"))
+        if qh_expr is None:
+            for cand in ["ewfd.Qh", "ewfd.Qrh", "ewfd.Qtot"]:
+                try:
+                    _ = model.evaluate(cand)
+                    qh_expr = cand
+                    log(f"  손실밀도 표현식 확정: {cand}")
+                    break
+                except Exception:
+                    continue
+            if qh_expr is None:
+                raise RuntimeError("Qh 계열 표현식을 찾지 못함 — 로그 회신")
+        Qh = np.ravel(model.evaluate(qh_expr))
+        m = min(X.size, Y.size, Qh.size)
+        import matplotlib.tri as mtri
+        tri = mtri.Triangulation(X[:m] * 1e-9, Y[:m] * 1e-9)
+        xy = np.column_stack([tri.x, tri.y])
+        t = tri.triangles
+        v1 = xy[t[:, 1]] - xy[t[:, 0]]
+        v2 = xy[t[:, 2]] - xy[t[:, 0]]
+        areas = 0.5 * np.abs(v1[:, 0] * v2[:, 1] - v1[:, 1] * v2[:, 0])  # numpy2: 2D cross 제거됨
+        integ = float(np.sum(areas * Qh[:m][t].mean(axis=1)))  # ∫Qh dA [W/m]
+        Phi = F_l * dlam * (lam_nm * 1e-9) / h_c  # photons/m^2/s in band
+        w_m = W * 1e-9
+        c_l = (A * Phi * w_m / integ) if integ > 0 else 0.0
+        if Gsum is None:
+            Gsum = np.zeros(m)
+        Gsum += Qh[:m] * c_l
+        j_opt_wave += q_e * A * Phi * 0.1  # mA/cm^2
+        alpha = 4 * np.pi * k_l / (lam_nm * 1e-9)
+        j_opt_bl += q_e * (1 - np.exp(-alpha * t_abs_m)) * Phi * 0.1
+        log(f"  [{li}/{nlam}] λ={lam_nm:.0f}nm n={n_l:.3f} k={k_l:.4f} A={A:.4f} "
+            f"({time.time() - t0:.1f}s)")
+    jd = jobs.job_dir(jid)
+    np.savetxt(jd / "g_table_slab.csv",
+               np.column_stack([X[:Gsum.size], Y[:Gsum.size], Gsum]),
+               header="x_nm y_nm G_per_m3s", comments="")
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    yb = np.linspace(500, 1300, 60)
+    prof = [Gsum[(Y[:Gsum.size] >= a) & (Y[:Gsum.size] < b)].mean() if
+            np.any((Y[:Gsum.size] >= a) & (Y[:Gsum.size] < b)) else np.nan
+            for a, b in zip(yb[:-1], yb[1:])]
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(yb[:-1] + np.diff(yb) / 2, prof, label="Wave optics G(y)")
+    depth = (1300 - (yb[:-1] + np.diff(yb) / 2)) * 1e-9
+    lam_c = 550e-9
+    k_c = float(np.interp(0.55, nk[:, 0], nk[:, 2]))
+    bl = np.nanmax(prof) * np.exp(-4 * np.pi * k_c / lam_c * depth)
+    ax.plot(yb[:-1] + np.diff(yb) / 2, bl, "--", label="Beer-Lambert 형태 (550nm, 참고)")
+    ax.set_xlabel("y [nm] (1300=입사면)")
+    ax.set_ylabel("G [1/(m^3 s)]")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(jd / "g_profile_slab.png", dpi=140)
+    log(f"\n[결과] Jsc,opt (파동광학) = {j_opt_wave:.2f} mA/cm² vs Beer-Lambert = {j_opt_bl:.2f} mA/cm²")
+    log("G(x,y) 테이블·프로파일 저장: g_table_slab.csv, g_profile_slab.png")
+    log(">> WO-3 완료 — 간섭 프린지가 프로파일에 보이면 파동광학이 살아있는 것 <<")
+
+
 def _summary(log, results):
     log("\n===== 요약 =====")
     for name, r in results:

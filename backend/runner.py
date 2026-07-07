@@ -54,6 +54,7 @@ def _work_loop():
         "spike_ibc": diagnostics.spike_ibc,
         "spike_wo": diagnostics.spike_wo,
         "spike_wo2": diagnostics.spike_wo2,
+        "spike_wo3": diagnostics.spike_wo3,
         "case_run": comsol_cases.run_case,
         "extract_solved": comsol_cases.run_extract_solved,
     }
