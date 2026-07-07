@@ -53,6 +53,7 @@ def _work_loop():
         "spike_nd": diagnostics.spike_nd,
         "spike_ibc": diagnostics.spike_ibc,
         "spike_wo": diagnostics.spike_wo,
+        "spike_wo2": diagnostics.spike_wo2,
         "case_run": comsol_cases.run_case,
         "extract_solved": comsol_cases.run_extract_solved,
     }
@@ -90,4 +91,10 @@ _thread = threading.Thread(target=_work_loop, daemon=True, name="comsol-worker")
 
 def start_worker():
     if not _thread.is_alive():
+        try:  # 서버 재시작으로 고아가 된 작업 정리 (좀비 'running' 방지, 2026-07-08)
+            for jb in jobs.list_jobs(300):
+                if jb["status"] in ("running", "queued"):
+                    jobs.set_status(jb["id"], "failed", "서버 재시작으로 중단됨 — 다시 실행하세요")
+        except Exception:
+            pass
         _thread.start()

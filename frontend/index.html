@@ -5,38 +5,66 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>COMSOL AI 앱</title>
 <style>
-  :root { --b:#2563eb; --bg:#f6f7f9; --card:#fff; --line:#e3e6ea; --mut:#6b7280; }
+  /* COMSOL Desktop 스타일 — 모델 빌더 트리 + 설정 창 + Messages 도크 */
+  :root { --b:#0079c2; --bsoft:#cfe6f5; --bhover:#e4eff8; --bg:#eef1f4; --chrome:#f6f8fa;
+          --card:#fff; --line:#cdd3d9; --line2:#dde2e7; --mut:#5f6b76; --ink:#1d2733; }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:#111827; }
-  header { background:#111827; color:#fff; padding:12px 20px; display:flex; align-items:center; gap:12px; }
-  header h1 { font-size:16px; margin:0; font-weight:600; }
-  header .sub { color:#9ca3af; font-size:12px; }
-  nav { display:flex; gap:4px; padding:10px 16px 0; }
-  nav button { border:1px solid var(--line); border-bottom:none; background:#eef0f3; padding:8px 14px;
-    border-radius:8px 8px 0 0; cursor:pointer; font-size:13px; }
-  nav button.on { background:var(--card); font-weight:600; }
-  main { padding:16px; max-width:1100px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:0 10px 10px 10px; padding:16px; }
-  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-  button.act { background:var(--b); color:#fff; border:none; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:13px; }
-  button.act:disabled { background:#9ca3af; }
-  button.ghost { background:#fff; border:1px solid var(--line); padding:7px 12px; border-radius:8px; cursor:pointer; font-size:12px; }
-  .badge { padding:2px 8px; border-radius:10px; font-size:11px; }
-  .b-done{background:#dcfce7;color:#166534} .b-running{background:#dbeafe;color:#1e40af}
-  .b-failed{background:#fee2e2;color:#991b1b} .b-queued{background:#f3f4f6;color:#374151}
-  .b-cancelled{background:#fef3c7;color:#92400e}
-  table { border-collapse:collapse; width:100%; font-size:13px; }
-  td,th { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; }
-  pre { background:#0b1220; color:#d1e3ff; padding:12px; border-radius:8px; font-size:11.5px;
-    max-height:420px; overflow:auto; white-space:pre-wrap; }
-  .field { margin:8px 0; }
-  .field label { display:block; font-size:12px; color:var(--mut); margin-bottom:3px; }
-  .field input:not([type=radio]):not([type=checkbox]):not([type=file]),.field select { padding:7px 9px; border:1px solid var(--line); border-radius:7px; width:340px; font-size:13px; }
+  body { margin:0; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--ink);
+         font-size:12.5px; display:grid; grid-template-columns:232px 1fr;
+         grid-template-rows:auto 1fr; grid-template-areas:"hd hd" "nav mn"; min-height:100vh; }
+  header { grid-area:hd; background:var(--chrome); border-bottom:1px solid var(--line);
+           padding:7px 14px; display:flex; align-items:center; gap:10px; }
+  header h1 { font-size:13.5px; margin:0; font-weight:600; color:var(--ink); display:flex; align-items:center; gap:8px; }
+  header h1::before { content:""; width:16px; height:16px; background:var(--b); border-radius:3px;
+           display:inline-block; box-shadow:inset -4px -4px 0 #005a92; }
+  header .sub { color:var(--mut); font-size:11.5px; }
+  nav { grid-area:nav; display:flex; flex-direction:column; gap:1px; padding:8px 6px;
+        background:var(--chrome); border-right:1px solid var(--line); align-content:start; }
+  nav::before { content:"모델 빌더"; font-size:11px; font-weight:600; color:var(--mut);
+        padding:2px 8px 6px; letter-spacing:.3px; border-bottom:1px solid var(--line2); margin-bottom:4px; }
+  nav button { border:1px solid transparent; background:transparent; padding:5px 8px 5px 22px;
+        cursor:pointer; font-size:12.5px; text-align:left; border-radius:3px; color:var(--ink);
+        position:relative; font-family:inherit; }
+  nav button::before { content:"▸"; position:absolute; left:8px; color:var(--mut); font-size:10px; top:7px; }
+  nav button:hover { background:var(--bhover); }
+  nav button.on { background:var(--bsoft); border-color:#a9cfe8; font-weight:600; }
+  nav button.on::before { content:"▾"; color:var(--b); }
+  main { grid-area:mn; padding:12px 14px; max-width:1100px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:3px; padding:12px 14px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  button.act { background:var(--b); color:#fff; border:1px solid #00639e; padding:5px 14px;
+        border-radius:3px; cursor:pointer; font-size:12.5px; font-family:inherit; }
+  button.act:hover { background:#0069a8; }
+  button.act:disabled { background:#aeb7bf; border-color:#9aa3ab; }
+  button.ghost { background:#f3f5f7; border:1px solid #c2cad1; padding:4px 10px; border-radius:3px;
+        cursor:pointer; font-size:12px; font-family:inherit; }
+  button.ghost:hover { background:var(--bhover); border-color:var(--b); }
+  .badge { padding:1px 7px; border-radius:2px; font-size:11px; border:1px solid transparent; }
+  .b-done{background:#e7f4e4;color:#1e6b34;border-color:#bfe0b8} .b-running{background:#e2eefb;color:#0a58a0;border-color:#b5d4f0}
+  .b-failed{background:#fbe7e7;color:#a02020;border-color:#f0bcbc} .b-queued{background:#f0f2f4;color:#4a555f;border-color:#d8dde2}
+  .b-cancelled{background:#fdf3dd;color:#8a5a09;border-color:#eeda9f}
+  table { border-collapse:collapse; width:100%; font-size:12.5px; }
+  th { background:#f2f4f6; font-weight:600; }
+  td,th { border-bottom:1px solid var(--line2); padding:4px 8px; text-align:left; }
+  pre { background:#fff; color:#26313c; border:1px solid var(--line); padding:10px;
+        border-radius:3px; font-size:11.5px; font-family:Consolas,'Courier New',monospace;
+        max-height:420px; overflow:auto; white-space:pre-wrap; }
+  .field { margin:7px 0; }
+  .field label { display:block; font-size:11.5px; color:var(--mut); margin-bottom:2px; }
+  .field input:not([type=radio]):not([type=checkbox]):not([type=file]),.field select {
+        padding:4px 8px; border:1px solid #b8c1c9; border-radius:2px; width:340px; font-size:12.5px;
+        font-family:inherit; background:#fff; }
+  .field input:focus,.field select:focus,textarea:focus { outline:1px solid var(--b); border-color:var(--b); }
   .field input[type=radio] { width:auto; margin-right:4px; vertical-align:middle; }
-  .hint { font-size:12px; color:var(--mut); margin-top:8px; line-height:1.6; }
-  .ok{color:#166534} .no{color:#991b1b}
-  img.art { max-width:100%; border:1px solid var(--line); border-radius:8px; margin-top:8px; }
-  h3 { margin:4px 0 10px; font-size:14px; }
+  .hint { font-size:11.5px; color:var(--mut); margin-top:6px; line-height:1.55; }
+  .ok{color:#1e6b34} .no{color:#a02020}
+  img.art { max-width:100%; border:1px solid var(--line); border-radius:2px; margin-top:8px; background:#fff; }
+  h3 { margin:2px 0 10px; font-size:12.5px; font-weight:600; color:var(--ink);
+       border-bottom:1px solid var(--line2); padding-bottom:5px; }
+  h3::before { content:"▾ "; color:var(--b); font-size:10px; }
+  h4 { font-size:12px; color:var(--ink); }
+  textarea { border:1px solid #b8c1c9 !important; border-radius:2px !important; font-family:inherit; }
+  details > summary { user-select:none; }
 </style>
 </head>
 <body>

@@ -227,6 +227,14 @@ def run_spike_wo():
     return {"job_id": jid}
 
 
+@app.post("/api/diagnostics/spike_wo2")
+def run_spike_wo2(body: dict | None = None):
+    """WO-2: ewfd 슬랩 vs TMM 대조 검증."""
+    jid = jobs.create_job("spike_wo2", body or {})
+    runner.submit(jid)
+    return {"job_id": jid}
+
+
 @app.post("/api/diagnostics/spike_ibc")
 def run_spike_ibc(body: dict | None = None):
     """IBC 2D 빌더 스파이크 (Union 선택·수렴·전하분포·ETL 판별 실험용)."""

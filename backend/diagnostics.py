@@ -421,6 +421,146 @@ def spike_wo(jid, params, log, get_client):
     log(">> 이 덤프가 Wave Optics 빌더(광학-전기 결합)의 API 사전이 됩니다 — Claude가 분석 <<")
 
 
+def spike_wo2(jid, params, log, get_client):
+    """O-2: 공기/MAPbI3(800nm)/공기 슬랩을 ewfd로 직접 빌드 → R/T/A를 TMM과 대조.
+
+    2026-07-08 O-1 덤프로 확정된 API 사용: WaveEquationElectric(n_mat/ki_mat userdef),
+    PeriodicPort, FloquetPeriodicCondition(Floquet_source=FromPeriodicPort),
+    Frequency 스터디, ewfd.Rtotal/Ttotal/Atotal.
+    검증 기준: |R−R_TMM|, |A−A_TMM| < 0.03.
+    """
+    import cmath
+
+    import numpy as np
+
+    from . import data_prep, jobs
+    from .stack_builder import _try_set
+    lam_nm = float(params.get("lam_nm", 550))
+    t_abs = 800.0
+    client = get_client(log)
+    nk = np.loadtxt(ROOT / "data" / data_prep.dataset("mapbi3_nk")["file"], encoding="utf-8")
+    n2r = float(np.interp(lam_nm / 1000, nk[:, 0], nk[:, 1]))
+    k2 = float(np.interp(lam_nm / 1000, nk[:, 0], nk[:, 2]))
+    log(f"=== WO-2 슬랩 검증: λ={lam_nm}nm, MAPbI3 n={n2r:.4f}, k={k2:.5f} (Phillips) ===")
+    d = t_abs * 1e-9
+    lam = lam_nm * 1e-9
+    n1, n2c, n3 = 1.0, complex(n2r, k2), 1.0
+    r12 = (n1 - n2c) / (n1 + n2c)
+    r23 = (n2c - n3) / (n2c + n3)
+    t12 = 2 * n1 / (n1 + n2c)
+    t23 = 2 * n2c / (n2c + n3)
+    beta = 2 * cmath.pi * n2c * d / lam
+    e2 = cmath.exp(2j * beta)
+    r = (r12 + r23 * e2) / (1 + r12 * r23 * e2)
+    t = (t12 * t23 * cmath.exp(1j * beta)) / (1 + r12 * r23 * e2)
+    R_t, T_t = abs(r) ** 2, abs(t) ** 2
+    A_t = 1 - R_t - T_t
+    log(f"TMM 기준: R={R_t:.4f} T={T_t:.4f} A={A_t:.4f}")
+
+    model = client.create("spike_wo2")
+    j = model.java
+    try:
+        j.component().create("comp1", True)
+    except Exception:
+        j.modelNode().create("comp1")
+    comp = j.component("comp1")
+    geom = comp.geom().create("geom1", 2)
+    geom.lengthUnit("nm")
+    W, y0, y1, y2, y3 = 250.0, 0.0, 500.0, 1300.0, 1800.0
+    for tag, a, b in [("rb", y0, y1), ("rp", y1, y2), ("rt", y2, y3)]:
+        rct = geom.create(tag, "Rectangle")
+        rct.set("size", [f"{W:g}", f"{b - a:g}"])
+        rct.set("pos", ["0", f"{a:g}"])
+    geom.run()
+    log("  지오메트리 OK: 공기 500 / MAPbI3 800 / 공기 500 (nm), 주기 폭 250nm")
+
+    def box(tag, edim, x0, x1, ylo, yhi):
+        s = j.selection().create(tag, "Box")
+        s.set("entitydim", str(edim))
+        s.set("xmin", f"{x0:g}[nm]")
+        s.set("xmax", f"{x1:g}[nm]")
+        s.set("ymin", f"{ylo:g}[nm]")
+        s.set("ymax", f"{yhi:g}[nm]")
+        s.set("condition", "inside")
+    eps = 0.5
+    box("d_pvk", 2, -eps, W + eps, y1 - eps, y2 + eps)
+    box("b_top", 1, -eps, W + eps, y3 - eps, y3 + eps)
+    box("b_bot", 1, -eps, W + eps, y0 - eps, y0 + eps)
+    box("b_l", 1, -eps, eps, y0 - eps, y3 + eps)
+    box("b_r", 1, W - eps, W + eps, y0 - eps, y3 + eps)
+    uni = j.selection().create("b_lr", "Union")
+    uni.set("entitydim", "1")  # 경계 레벨 Union (2026-07-08 확정: 기본은 도메인 레벨)
+    uni.set("input", ["b_l", "b_r"])
+
+    ewfd = comp.physics().create("ewfd", "ElectromagneticWavesFrequencyDomain", "geom1")
+    wee1 = j.physics("ewfd").feature("wee1")
+    wee1.set("DisplacementFieldModel", "RefractiveIndex")
+    for pn, pv in [("n_mat", "userdef"), ("n", ["1"]), ("ki_mat", "userdef"), ("ki", ["0"])]:
+        wee1.set(pn, pv)
+    wee2 = ewfd.create("wee2", "WaveEquationElectric", 2)
+    wee2.selection().named("d_pvk")
+    wee2.set("DisplacementFieldModel", "RefractiveIndex")
+    for pn, pv in [("n_mat", "userdef"), ("n", [f"{n2r:.6f}"]),
+                   ("ki_mat", "userdef"), ("ki", [f"{k2:.6f}"])]:
+        wee2.set(pn, pv)
+    log("  파동방정식 OK: wee1=공기(전역), wee2=MAPbI3 (n/ki userdef — O-1 확정 패턴)")
+
+    # 생성 ID는 "Port"/"PeriodicCondition" — 속성으로 Periodic/Floquet 지정 (2026-07-08 확정)
+    pp1 = ewfd.create("pport1", "Port", 1)
+    pp1.selection().named("b_top")
+    pp1.set("PortType", "Periodic")
+    _try_set(pp1, [("PortExcitation", "on")], log, "pport1")
+    pp2 = ewfd.create("pport2", "Port", 1)
+    pp2.selection().named("b_bot")
+    pp2.set("PortType", "Periodic")
+    fpc = ewfd.create("fpc1", "PeriodicCondition", 1)
+    fpc.selection().named("b_lr")
+    _try_set(fpc, [("PeriodicType", "Floquet")], log, "fpc1")
+    _try_set(fpc, [("Floquet_source", "FromPeriodicPort")], log, "fpc1")
+    log("  포트/Floquet OK: 상부 입사(pport1 excitation), 하부 수음(pport2), 양측 Floquet")
+
+    msh = j.mesh().create("mesh1", "geom1")
+    hmax = lam_nm / (6.0 * max(n2r, 1.0))
+    try:
+        msh.feature("size").set("custom", "on")
+        msh.feature("size").set("hmax", f"{hmax:.1f}[nm]")
+        log(f"  메시 크기: hmax={hmax:.1f}nm (λ/6n)")
+    except Exception as e:
+        log(f"  메시 size 설정 실패({type(e).__name__}) — 기본 크기 사용 [확인 대상]")
+    try:
+        msh.create("ftri1", "FreeTri")
+    except Exception:
+        pass
+
+    std1 = j.study().create("std1")
+    fr = std1.create("freq", "Frequency")
+    f_hz = 299792458.0 / lam
+    ok = _try_set(fr, [("plist", [f_hz])], log, "freq.plist")
+    _try_set(fr, [("punit", "Hz"), ("punit", ["Hz"])], log, "freq.punit")
+    log(f"  주파수 스터디: f={f_hz:.4e} Hz (λ={lam_nm}nm) plist설정={'OK' if ok else '실패'}")
+    jd = jobs.job_dir(jid)
+    model.save(str(jd / "spike_wo2_unsolved.mph"))
+    import time
+    t0 = time.time()
+    model.solve("Study 1")
+    log(f"솔브 OK ({time.time() - t0:.1f}s)")
+    res = {}
+    for expr in ["ewfd.Rtotal", "ewfd.Ttotal", "ewfd.Atotal"]:
+        try:
+            v = float(np.ravel(model.evaluate(expr))[0])
+            res[expr.split(".")[1]] = v
+            log(f"  {expr} = {v:.4f}")
+        except Exception as e:
+            log(f"  {expr} 평가 실패: {type(e).__name__} {str(e)[:100]}")
+    model.save(str(jd / "spike_wo2_solved.mph"))
+    if res:
+        dR = abs(res.get("Rtotal", 9) - R_t)
+        dA = abs(res.get("Atotal", 9) - A_t)
+        verdict = "통과" if (dR < 0.03 and dA < 0.03) else "실패"
+        log(f"\n[검증] TMM 대조: ΔR={dR:.4f}, ΔA={dA:.4f} → {verdict} (기준 <0.03)")
+    log(">> WO-2 완료 — Claude가 결과를 분석합니다 <<")
+
+
 def _summary(log, results):
     log("\n===== 요약 =====")
     for name, r in results:
