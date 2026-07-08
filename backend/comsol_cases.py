@@ -90,6 +90,8 @@ def run_case(jid, params, log, get_client):
         case = library.load_case(case_id)
         if case.get("builder") == "ibc2d":
             _run_ibc(jid, params, log, get_client)   # IBC 전용 2D 빌더
+        elif case.get("builder") == "ibc3d":
+            _run_ibc3d(jid, params, log, get_client)  # IBC 3D 단위 셀 (핑거 끝단)
         else:
             _run_stack(jid, params, log, get_client)  # 제네릭 1D/평판 스택
     else:
@@ -831,6 +833,136 @@ def _run_ibc(jid, params, log, get_client):
         log("\n⚠️ 유효한 결과 없음 — 로그 회신 요청")
     if ok_jsc:
         log("[검증 기준 — IBC CASE_SPEC 6절] W↑ 또는 gap↑ → Jsc 감소(수집 손실) / Jsc ≤ 26.26 / 실패 조합 로그 확인")
+    if cancelled:
+        raise jobs.Cancelled()
+
+
+def _run_ibc3d(jid, params, log, get_client):
+    """IBC 3D 단위 셀 (v4): W×gap 그리드, 핑거 길이·팁 파라미터, Jsc 전용.
+
+    검증 기준: tip_len=finger_len(완전 압출)이면 2D IBC와 Jsc 일치해야 함
+    (W3/g3 wave 기준 17.46 mA/cm², 2026-07-08).
+    """
+    from . import ibc3d_builder, library
+    client = get_client(log)
+
+    def _list(key, default):
+        raw = str(params.get(key) or default)
+        return [float(v) for v in raw.replace(" ", "").split(",") if v]
+
+    ws = _list("w_list_um", "3")
+    gs = _list("gap_list_um", "3")
+    t_abs = float(params.get("t_abs_nm") or 800)
+    lz_um = float(params.get("finger_len_um") or 4)
+    tip_um = float(params.get("tip_len_um") or lz_um)  # 기본 = 압출 극한(검증 모드)
+    taun = f"{float(params.get('taun_ns') or 38.7):g}[ns]"
+    mode = params.get("mode", "local")
+    gen_mode = str(params.get("gen_mode", "wave_optics"))
+    log(f"IBC 3D 그리드: W {ws} × gap {gs} um → {len(ws)*len(gs)}셀 / 핑거 {lz_um:g}um "
+        f"(팁 {tip_um:g}um{' = 압출 극한(2D 대조 검증 모드)' if tip_um >= lz_um else ''}) "
+        f"/ Jsc 전용 / 광생성={gen_mode}")
+    mats = {
+        "absorber": library.material_props("mapbi3")["props"],
+        "sno2": library.material_props("sno2")["props"],
+        "niox": library.material_props("niox")["props"],
+        "sno2_nd": "1e19[1/cm^3]",
+        "niox_na": "1e18[1/cm^3]",
+    }
+    g_profile = None
+    if gen_mode == "wave_optics":
+        from . import wo_optics
+        g_profile = wo_optics.compute_G_profile(client, t_abs, log,
+                                                nlam=int(float(params.get("nlam") or 15)))
+    jd = jobs.job_dir(jid)
+    combos = [(w, g) for g in gs for w in ws]
+    files = {}
+    log(f"\n[1단계] unsolved 모델 {len(combos)}개 생성")
+    for i, (w, g) in enumerate(combos, 1):
+        jobs.check_cancel(jid)
+        model, area_cm2 = ibc3d_builder.build(
+            client, f"ibc3d_{w:g}_{g:g}", mats, w * 1000.0, g * 1000.0, t_abs, taun,
+            lz_um * 1000.0, tip_um * 1000.0, log, g_profile=g_profile, v0_only=True)
+        fname = f"ibc3d_W{w:g}_g{g:g}_unsolved.mph"
+        model.save(str(jd / fname))
+        client.remove(model)
+        files[(w, g)] = (fname, area_cm2)
+        log(f"  [{i}/{len(combos)}] unsolved 저장: {fname}")
+    _write_server_script(jid, [files[c][0] for c in combos], log)
+    if mode == "export":
+        log("반출용 생성 완료")
+        return
+
+    log(f"\n[2단계] 순차 솔브 ({len(combos)}건, 셀당 수 분 가능)")
+    rows = []
+    cancelled = False
+    jsc_ref = g_profile["jsc_wave"] if g_profile else 26.261
+    for i, (w, g) in enumerate(combos, 1):
+        if jobs.cancel_requested(jid):
+            log(f"\n[중단 요청] 남은 {len(combos)-i+1}건 건너뜀")
+            cancelled = True
+            break
+        fname, area_cm2 = files[(w, g)]
+        log(f"\n===== [{i}/{len(combos)}] W={w:g}um, gap={g:g}um =====")
+        model = None
+        try:
+            import time as _t
+            model = client.load(str(jd / fname))
+            for s in (model / "studies").children():
+                t0 = _t.time()
+                log(f"  솔브: {s.name()}")
+                model.solve(s.name())
+                log(f"    완료 {_t.time()-t0:.1f}s")
+            I = 0.0
+            for dsn in [d.name() for d in (model / "datasets").children()]:
+                try:
+                    val = float(np.ravel(model.evaluate("semi.I0_1", dataset=dsn))[-1])
+                    log(f"    데이터셋 {dsn}: I0_1 = {val:.4e} A")
+                    if abs(val) > abs(I):
+                        I = val
+                except Exception:
+                    continue
+            if I == 0.0:  # 전 데이터셋 0 → 접점 배선 의심, 엔티티 덤프
+                for tag in ("mc1", "mc2", "adm_s", "adm_n"):
+                    try:
+                        ents = model.java.physics("semi").feature(tag).selection().entities(
+                            2 if tag.startswith("mc") else 3)
+                        log(f"    {tag} 엔티티: {list(ents)[:12]}")
+                    except Exception as e:
+                        log(f"    {tag} 엔티티 조회 실패: {type(e).__name__}")
+                raise RuntimeError("SC 전류가 모든 데이터셋에서 0 — 로그의 엔티티 덤프 분석 필요")
+            jsc = abs(I) * 1000.0 / area_cm2
+            eta = jsc / jsc_ref
+            rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": round(jsc, 3),
+                         "eta_col": round(eta, 4)})
+            log(f"  Jsc = {jsc:.3f} mA/cm² (수집효율 {eta:.1%}, 광학 상한 {jsc_ref:.2f})")
+            model.save(str(jd / fname.replace("_unsolved", "_solved")))
+        except Exception as e:
+            log(f"  ✖ 셀 실패 ({type(e).__name__}: {str(e)[:180]}) — 다음 진행")
+            rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": float("nan"),
+                         "eta_col": float("nan")})
+        finally:
+            try:
+                if model is not None:
+                    client.remove(model)
+            except Exception:
+                pass
+    if rows:
+        _save_csv(jid, rows)
+        try:
+            _plot_heatmap(jid, ws, gs, rows,
+                          {"param": "W_um", "field": "w_list_um", "label": "전극 폭 W [um]"},
+                          {"param": "gap_um", "field": "gap_list_um", "label": "간격 gap [um]"},
+                          keys=(("Jsc_mA_cm2", "Jsc [mA/cm2]"), ("eta_col", "수집효율")),
+                          suptitle=f"IBC 3D unit cell (finger {lz_um:g}um, tip {tip_um:g}um)")
+        except Exception as e:
+            log(f"⚠️ 히트맵 실패: {type(e).__name__}: {e}")
+    ok = [r for r in rows if r["Jsc_mA_cm2"] == r["Jsc_mA_cm2"]]
+    if ok:
+        best = max(ok, key=lambda r: r["Jsc_mA_cm2"])
+        log(f"\n최적: W={best['W_um']:g} gap={best['gap_um']:g} → Jsc {best['Jsc_mA_cm2']} mA/cm²")
+        if tip_um >= lz_um:
+            log("[검증] 압출 극한 모드 — 같은 W/gap의 2D IBC Jsc와 ~2% 내 일치해야 통과 "
+                "(W3/g3 wave 기준 17.46)")
     if cancelled:
         raise jobs.Cancelled()
 

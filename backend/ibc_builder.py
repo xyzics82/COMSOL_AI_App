@@ -170,6 +170,7 @@ def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, vcfg, log, g_profile
     adm_n.set("NAc", mats["niox_na"])
 
     tar = semi.create("tar1", "TrapAssistedRecombination", 2)  # 전 도메인 (한계 7.5절)
+    tar.selection().all()  # ⚠️ create()된 기능은 선택이 빈 채 시작 — 명시 필수 (2026-07-08)
     tar.set("taun_mat", "userdef")
     tar.set("taun", taun)
     tar.set("taup_mat", "userdef")

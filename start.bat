@@ -48,7 +48,7 @@ if errorlevel 1 goto fail
 rem Kill ALL previous servers of this project (by path), then any port owner
 echo Stopping any previous server of this project...
 powershell -NoProfile -Command "Get-Process python -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*comsol_ai_app*' } | ForEach-Object { Write-Host ('  stopping project python PID ' + $_.Id); Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }"
-powershell -NoProfile -Command "for($i=0;$i -lt 10;$i++){ $c=Get-NetTCPConnection -LocalPort 8712 -State Listen -ErrorAction SilentlyContinue; if(-not $c){ Write-Host '  port 8712 is free'; exit 0 }; foreach($x in $c){ Write-Host ('  stopping port owner PID ' + $x.OwningProcess); Stop-Process -Id $x.OwningProcess -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 500 }; Write-Host '  WARNING: port still busy - run stop.bat, close ALL black windows, then start.bat once'"
+powershell -NoProfile -Command "for($i=0;$i -lt 10;$i++){ $c=Get-NetTCPConnection -LocalPort 8712 -State Listen -ErrorAction SilentlyContinue; if(-not $c){ Write-Host '  port 8712 is free'; exit 0 }; foreach($x in $c){ Write-Host ('  stopping port owner PID tree ' + $x.OwningProcess); taskkill /PID $x.OwningProcess /T /F | Out-Null }; Start-Sleep -Milliseconds 700 }; Write-Host '  WARNING: port still busy - run stop.bat, close ALL black windows, then start.bat once'"
 
 start "" http://127.0.0.1:8712
 echo.

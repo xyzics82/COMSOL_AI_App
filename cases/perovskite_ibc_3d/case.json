@@ -1,0 +1,21 @@
+{
+  "id": "perovskite_ibc_3d",
+  "name": "페로브스카이트 IBC 3D 단위 셀 — 핑거 끝단 효과 (v4)",
+  "desc": "IDE 핑거를 3D로: x=가로(W+gap), y=수직, z=핑거 길이. 팁 길이<핑거 길이면 끝단 너머 갭의 수집 손실이 나타남. Jsc 전용(V=0). 검증: 팁=핑거 길이(압출 극한)에서 2D IBC와 일치. 사양: docs/SPEC_OPTICS_IDE.md + ibc3d_builder.py 헤더",
+  "builder": "ibc3d",
+  "grid": {
+    "x": {"param": "W_um", "field": "w_list_um", "label": "전극 폭 W [um]"},
+    "y": {"param": "gap_um", "field": "gap_list_um", "label": "간격 gap [um]"}
+  },
+  "schema": [
+    {"key": "w_list_um", "label": "전극 폭 W 목록 [um]", "type": "text", "default": "3"},
+    {"key": "gap_list_um", "label": "n/p 간격 gap 목록 [um]", "type": "text", "default": "3"},
+    {"key": "finger_len_um", "label": "단위 셀 z 길이 [um] (핑거 방향)", "type": "number", "default": 4},
+    {"key": "tip_len_um", "label": "핑거(CTL) 길이 [um] — 기본=z 길이(압출 극한, 2D 대조 검증)", "type": "number", "default": 4},
+    {"key": "t_abs_nm", "label": "흡수층 두께 [nm]", "type": "number", "default": 800},
+    {"key": "taun_ns", "label": "흡수층 SRH τ [ns]", "type": "number", "default": 38.7},
+    {"key": "gen_mode", "label": "광생성 모델", "type": "select", "options": ["wave_optics", "beer_lambert"], "default": "wave_optics"},
+    {"key": "mode", "label": "실행 방식", "type": "select", "options": ["local", "export"], "default": "local"}
+  ],
+  "data_requirements": ["am15", "mapbi3_nk"]
+}
