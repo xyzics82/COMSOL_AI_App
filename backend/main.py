@@ -263,6 +263,9 @@ def run_case(case_id: str, params: dict):
     p = comsol_cases.schema_defaults(case_id)
     p.update(params or {})
     p["case_id"] = case_id
+    # 사용 엔진을 작업 기록에 명시 (④ 목록·상세 표기용 — 케이스 삭제 후에도 이력 유지)
+    p["engine"] = next((c.get("engine", "comsol") for c in comsol_cases.get_cases()
+                        if c.get("id") == case_id), "comsol")
     jid = jobs.create_job("case_run", p)
     runner.submit(jid)
     return {"job_id": jid}
@@ -286,6 +289,17 @@ def engines_settings(body: dict):
             "settings": engines.load_settings()}
 
 
+@app.post("/api/engines/{engine_id}/check")
+def engine_check(engine_id: str):
+    """엔진별 환경 점검 작업 (COMSOL 외 — 동글 불필요 엔진은 동글 없이 완료)."""
+    from . import engines
+    if engine_id not in [e["id"] for e in engines.engines_status()]:
+        raise HTTPException(404, "no such engine")
+    jid = jobs.create_job("engine_check", {"engine": engine_id})
+    runner.submit(jid)
+    return {"job_id": jid}
+
+
 @app.post("/api/engines/{engine_id}/import")
 async def engine_import(engine_id: str, case_id: str, files: list[UploadFile]):
     """외부 프로그램 실행 결과 파일 업로드 → 파싱 작업 생성 (SCAPS .iv, MATLAB csv, QE .out 등)."""
@@ -307,8 +321,10 @@ async def engine_import(engine_id: str, case_id: str, files: list[UploadFile]):
 
 
 @app.get("/api/jobs")
-def list_jobs():
-    return jobs.list_jobs()
+def list_jobs(limit: int = 500):
+    """기본 500건 — 이전 기본 50은 활발한 날 하루치에 밀려 이전 날짜가 사라졌음 (2026-07-08).
+    날짜별 접기 UI라 수백 건도 가볍다."""
+    return jobs.list_jobs(limit)
 
 
 @app.get("/api/jobs/{jid}")

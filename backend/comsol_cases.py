@@ -943,8 +943,10 @@ def _run_ibc3d(jid, params, log, get_client):
         log("반출용 생성 완료")
         return
 
-    log(f"\n[2단계] 순차 솔브 ({len(combos)}건, 셀당 수 분 가능)")
+    log(f"\n[2단계] 순차 솔브 ({len(combos)}건, 셀당 수 분~수십 분 — 촘촘한 메시·풀 J-V일수록 길어짐)")
     rows = []
+    jv_curves = []  # full_jv일 때 조합별 J-V 곡선 (jv.png + 재플롯 CSV)
+    pin = _pin_mw_cm2(log)
     cancelled = False
     jsc_ref = g_profile["jsc_wave"] if g_profile else 26.261
     for i, (w, g) in enumerate(combos, 1):
@@ -963,29 +965,42 @@ def _run_ibc3d(jid, params, log, get_client):
                 log(f"  솔브: {s.name()}")
                 model.solve(s.name())
                 log(f"    완료 {_t.time()-t0:.1f}s")
-            I = 0.0
-            for dsn in [d.name() for d in (model / "datasets").children()]:
-                try:
-                    val = float(np.ravel(model.evaluate("semi.I0_1", dataset=dsn))[-1])
-                    log(f"    데이터셋 {dsn}: I0_1 = {val:.4e} A")
-                    if abs(val) > abs(I):
-                        I = val
-                except Exception:
-                    continue
-            if I == 0.0:  # 전 데이터셋 0 → 접점 배선 의심, 엔티티 덤프
-                for tag in ("mc1", "mc2", "adm_s", "adm_n"):
+            if jv_mode == "full_jv":
+                # 풀 J-V: 스윕 데이터셋 자동 탐색 → 지표(Jsc/Voc/FF/PCE) + J-V 곡선 축적
+                V, I_A = _extract_iv(model, log)
+                m, Jgen = _metrics(V, I_A, area_cm2, pin, log)
+                jsc = m["Jsc_mA_cm2"]
+                eta = jsc / jsc_ref if jsc == jsc else float("nan")
+                rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": jsc,
+                             "eta_col": round(eta, 4), "Voc_V": m["Voc_V"],
+                             "FF": m["FF"], "PCE_pct": m["PCE_pct"]})
+                jv_curves.append((f"W{w:g}/g{g:g}", V, Jgen))
+                log(f"  W{w:g}/g{g:g}: Jsc {jsc} / Voc {m['Voc_V']} / FF {m['FF']} / "
+                    f"PCE {m['PCE_pct']}% (수집효율 {eta:.1%})")
+            else:
+                I = 0.0
+                for dsn in [d.name() for d in (model / "datasets").children()]:
                     try:
-                        ents = model.java.physics("semi").feature(tag).selection().entities(
-                            2 if tag.startswith("mc") else 3)
-                        log(f"    {tag} 엔티티: {list(ents)[:12]}")
-                    except Exception as e:
-                        log(f"    {tag} 엔티티 조회 실패: {type(e).__name__}")
-                raise RuntimeError("SC 전류가 모든 데이터셋에서 0 — 로그의 엔티티 덤프 분석 필요")
-            jsc = abs(I) * 1000.0 / area_cm2
-            eta = jsc / jsc_ref
-            rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": round(jsc, 3),
-                         "eta_col": round(eta, 4)})
-            log(f"  Jsc = {jsc:.3f} mA/cm² (수집효율 {eta:.1%}, 광학 상한 {jsc_ref:.2f})")
+                        val = float(np.ravel(model.evaluate("semi.I0_1", dataset=dsn))[-1])
+                        log(f"    데이터셋 {dsn}: I0_1 = {val:.4e} A")
+                        if abs(val) > abs(I):
+                            I = val
+                    except Exception:
+                        continue
+                if I == 0.0:  # 전 데이터셋 0 → 접점 배선 의심, 엔티티 덤프
+                    for tag in ("mc1", "mc2", "adm_s", "adm_n"):
+                        try:
+                            ents = model.java.physics("semi").feature(tag).selection().entities(
+                                2 if tag.startswith("mc") else 3)
+                            log(f"    {tag} 엔티티: {list(ents)[:12]}")
+                        except Exception as e:
+                            log(f"    {tag} 엔티티 조회 실패: {type(e).__name__}")
+                    raise RuntimeError("SC 전류가 모든 데이터셋에서 0 — 로그의 엔티티 덤프 분석 필요")
+                jsc = abs(I) * 1000.0 / area_cm2
+                eta = jsc / jsc_ref
+                rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": round(jsc, 3),
+                             "eta_col": round(eta, 4)})
+                log(f"  Jsc = {jsc:.3f} mA/cm² (수집효율 {eta:.1%}, 광학 상한 {jsc_ref:.2f})")
             model.save(str(jd / fname.replace("_unsolved", "_solved")))
         except Exception as e:
             log(f"  ✖ 셀 실패 ({type(e).__name__}: {str(e)[:180]}) — 다음 진행")
@@ -1000,13 +1015,23 @@ def _run_ibc3d(jid, params, log, get_client):
     if rows:
         _save_csv(jid, rows)
         try:
+            hk = (("Jsc_mA_cm2", "Jsc [mA/cm2]"), ("eta_col", "수집효율"))
+            if jv_mode == "full_jv":
+                hk = (("Jsc_mA_cm2", "Jsc [mA/cm2]"), ("PCE_pct", "PCE [%]"),
+                      ("Voc_V", "Voc [V]"), ("FF", "FF"))
             _plot_heatmap(jid, ws, gs, rows,
                           {"param": "W_um", "field": "w_list_um", "label": "전극 폭 W [um]"},
                           {"param": "gap_um", "field": "gap_list_um", "label": "간격 gap [um]"},
-                          keys=(("Jsc_mA_cm2", "Jsc [mA/cm2]"), ("eta_col", "수집효율")),
+                          keys=hk,
                           suptitle=f"IBC 3D unit cell (finger {lz_um:g}um, tip {tip_um:g}um)")
         except Exception as e:
             log(f"⚠️ 히트맵 실패: {type(e).__name__}: {e}")
+    if jv_curves:
+        try:
+            _plot_jv(jid, jv_curves)
+            log("J-V 곡선 저장: jv.png (+ 재플롯용 jv_curves.csv)")
+        except Exception as e:
+            log(f"⚠️ J-V 플롯 실패: {type(e).__name__}: {e}")
     ok = [r for r in rows if r["Jsc_mA_cm2"] == r["Jsc_mA_cm2"]]
     if ok:
         best = max(ok, key=lambda r: r["Jsc_mA_cm2"])

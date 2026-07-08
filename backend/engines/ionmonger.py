@@ -171,6 +171,21 @@ def _gen_deck(jid, params, log):
     log("생성: parameters.m(템플릿 치환) + driver_app.m + READ_ME_FIRST.md")
 
 
+def check(jid, params, log):
+    """환경 점검: 저장소 파일 + MATLAB -batch 실구동 (동글 불필요, ~1분)."""
+    repo = find_repo("ionmonger_path", "IonMonger")
+    if not repo:
+        raise RuntimeError("IonMonger 폴더 없음 — tools/IonMonger 또는 ② 엔진 설정")
+    for f in ("master.m", "parameters_template.m"):
+        if (repo / f).exists():
+            log(f"저장소 파일 OK: {f}")
+        else:
+            raise RuntimeError(f"저장소에 {f}가 없습니다 — 손상/버전 확인: {repo}")
+    from .matlab_util import check_matlab
+    check_matlab(jid, log, jobs.job_dir(jid))
+    log("IonMonger 점검 완료 — local 실행 가능 (검증 이력: 2026-07-08 히스테리시스 E2E 통과)")
+
+
 def run(jid, params, log, case):
     jd = jobs.job_dir(jid)
     mode = str(params.get("mode", "export"))

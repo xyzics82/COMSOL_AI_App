@@ -58,8 +58,9 @@ def _work_loop():
         "case_run": comsol_cases.run_case,
         "extract_solved": comsol_cases.run_extract_solved,
     }
-    from . import engines  # 멀티 엔진 결과 가져오기 (2026-07-08)
+    from . import engines  # 멀티 엔진 결과 가져오기·환경 점검 (2026-07-08)
     handlers["engine_import"] = engines.run_import
+    handlers["engine_check"] = engines.run_check
     while True:
         jid = _q.get()
         job = jobs.get_job(jid)

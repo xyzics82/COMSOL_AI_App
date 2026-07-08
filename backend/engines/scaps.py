@@ -97,6 +97,21 @@ quit
 """
 
 
+def check(jid, params, log):
+    """환경 점검: 실행 파일 탐지 + .iv 파서 자기검사 (동글 불필요)."""
+    exe = find_scaps()
+    if exe:
+        log(f"SCAPS 실행 파일 OK: {exe} (⚠️ CLI 자동 구동은 첫 실행 때 함께 검증)")
+    else:
+        log("SCAPS 미탐지 — 겐트대(scaps@elis.ugent.be) 신청 후 설치, ② 엔진 설정에 경로 입력")
+        log("  설치 전에도 가능: export(레시피·스크립트 생성) / GUI 계산 결과 .iv 업로드 판독")
+    sample = "v(V)\t jtot(mA/cm2)\n 0.0\t-21.0\n 0.5\t-20.5\n 1.0\t-8.0\n 1.1\t 5.0\n"
+    arr, _ = _numeric_block(sample, log, "selftest.iv")
+    assert arr.shape == (4, 2), "파서 자기검사 실패"
+    log(".iv 파서 자기검사 OK")
+    log("SCAPS 점검 완료" + ("" if exe else " (실행 파일만 설치되면 끝)"))
+
+
 def run(jid, params, log, case):
     jd = jobs.job_dir(jid)
     mode = str(params.get("mode", "export"))

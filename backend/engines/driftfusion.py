@@ -107,6 +107,22 @@ def _gen_deck(jid, params, log):
     log("  물성 창작 없음 — 저장소 템플릿 기반, 폼 값만 오버라이드")
 
 
+def check(jid, params, log):
+    """환경 점검: 저장소 파일 + MATLAB -batch 실구동 (동글 불필요, ~1분)."""
+    repo = find_repo("driftfusion_path", "Driftfusion")
+    if not repo:
+        raise RuntimeError("Driftfusion 폴더 없음 — tools/Driftfusion 또는 ② 엔진 설정")
+    for f in ("initialise_df.m", "Core/pc.m", "Protocols/doCV.m",
+              "Input_files/spiro_mapi_tio2.csv"):
+        if (repo / f).exists():
+            log(f"저장소 파일 OK: {f}")
+        else:
+            log(f"⚠️ 저장소에 {f} 없음 — 버전에 따라 이름이 다를 수 있음 (실행 시 자동 탐색)")
+    from .matlab_util import check_matlab
+    check_matlab(jid, log, jobs.job_dir(jid))
+    log("Driftfusion 점검 완료 — local 실행 가능 (검증 이력: 2026-07-08 CV E2E 통과)")
+
+
 def run(jid, params, log, case):
     jd = jobs.job_dir(jid)
     mode = str(params.get("mode", "export"))

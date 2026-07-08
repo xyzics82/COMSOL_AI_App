@@ -108,27 +108,36 @@ def engines_status():
         ok, detail = False, "MPh 미설치"
     out.append({"id": "comsol", "name": "COMSOL", "kind": "device",
                 "available": ok, "detail": detail, "import_accept": ".mph",
-                "modes": ["local", "export"]})
+                "modes": ["local", "export"],
+                "requires": ["COMSOL 6.4+ (Semiconductor·Wave Optics 모듈)",
+                             "🔑 USB 동글(라이선스) — 솔브·점검·결과 추출 시 필수"]})
     ok, detail = _solcore_status()
     out.append({"id": "solcore", "name": "Solcore", "kind": "device+optics",
                 "available": ok, "detail": detail, "import_accept": "",
-                "modes": ["local"]})
+                "modes": ["local"],
+                "requires": ["파이썬 패키지만 (install_engines.bat 1회) — 동글·외부 프로그램 불필요"]})
     sc = find_scaps()
     out.append({"id": "scaps", "name": "SCAPS-1D", "kind": "device",
                 "available": bool(sc),
                 "detail": (f"실행 파일 OK: {sc} (⚠️ CLI 구동은 첫 실행 검증 필요)" if sc else
                            "미탐지 — 겐트대에 이메일 신청 후 설치, ② 엔진 설정에 scaps 경로 입력. 설치 전에도 export(레시피·스크립트 생성)와 import(.iv 업로드)는 사용 가능"),
-                "import_accept": ".iv,.qe,.txt,.dat", "modes": ["local", "export", "import"]})
+                "import_accept": ".iv,.qe,.txt,.dat", "modes": ["local", "export", "import"],
+                "requires": ["SCAPS 설치 (겐트대 이메일 신청, 무료) — 동글 불필요",
+                             "설치 전에도 레시피 생성·.iv 판독은 사용 가능"]})
     ok, detail = _matlab_engine_status("ionmonger_path", "IonMonger",
                                        "github.com/PerovskiteSCModelling/IonMonger")
     out.append({"id": "ionmonger", "name": "IonMonger", "kind": "device+ions",
                 "available": ok, "detail": detail, "import_accept": ".csv,.mat",
-                "modes": ["local", "export", "import"]})
+                "modes": ["local", "export", "import"],
+                "requires": ["MATLAB (툴박스 불필요, -batch 사용)",
+                             "IonMonger 저장소 (tools/ 동봉 — 설정 불필요)", "동글 불필요"]})
     ok, detail = _matlab_engine_status("driftfusion_path", "Driftfusion",
                                        "github.com/barnesgroupICL/Driftfusion")
     out.append({"id": "driftfusion", "name": "Driftfusion", "kind": "device+ions",
                 "available": ok, "detail": detail, "import_accept": ".csv,.mat",
-                "modes": ["local", "export", "import"]})
+                "modes": ["local", "export", "import"],
+                "requires": ["MATLAB (툴박스 불필요)", "Driftfusion 저장소 (tools/ 동봉)",
+                             "동글 불필요"]})
     try:
         import ase  # noqa
         qe_extra = f" · CIF 변환 가능(ase {ase.__version__})"
@@ -142,8 +151,34 @@ def engines_status():
         qe_detail = "반출 전용: 입력 덱 생성→서버 실행→결과 업로드 (WSL 설치 시 local 가능)" + qe_extra
     out.append({"id": "qe", "name": "QE (계면·원자)", "kind": "atomistic",
                 "available": True, "detail": qe_detail,
-                "import_accept": ".out,.dat,.txt,.xml,.cif", "modes": ["local", "export", "import"]})
+                "import_accept": ".out,.dat,.txt,.xml,.cif", "modes": ["local", "export", "import"],
+                "requires": ["WSL + quantum-espresso (또는 서버 반출) — 동글 불필요",
+                             "의사퍼텐셜 UPF (Si는 자동 다운로드, 그 외 SSSP에서)",
+                             "CIF 변환 시 ase (install_engines.bat)"]})
     return out
+
+
+def run_check(jid, params, log, get_client=None):
+    """엔진별 실점검 작업 (kind=engine_check) — COMSOL의 '빠른 점검'에 대응.
+    각 엔진의 실제 실행 경로를 가볍게 두드려 본다 (동글 불필요 엔진은 동글 없이 완료)."""
+    eid = str(params.get("engine"))
+    log(f"[{eid}] 환경 점검 시작")
+    if eid == "solcore":
+        from . import solcore_engine
+        return solcore_engine.check(jid, params, log)
+    if eid == "scaps":
+        from . import scaps
+        return scaps.check(jid, params, log)
+    if eid == "ionmonger":
+        from . import ionmonger
+        return ionmonger.check(jid, params, log)
+    if eid == "driftfusion":
+        from . import driftfusion
+        return driftfusion.check(jid, params, log)
+    if eid == "qe":
+        from . import qe
+        return qe.check(jid, params, log)
+    raise RuntimeError(f"점검 미지원 엔진: {eid} (COMSOL은 ①의 빠른/전체 점검 사용)")
 
 
 def run_case(engine_id, jid, params, log, case):

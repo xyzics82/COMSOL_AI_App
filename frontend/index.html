@@ -90,31 +90,25 @@
 </nav>
 <main>
   <div class="card" id="tab-diag">
-    <div class="hint" style="border:1px solid #fde68a;background:#fffbeb;border-radius:8px;padding:10px;margin-bottom:12px">
-      🔑 <b>COMSOL 동글(라이선스 키) 안내</b><br>
-      다음 작업은 실제 COMSOL을 실행하므로 <b>동글이 꽂혀 있어야</b> 합니다:
-      환경 점검 · ③ 실행(local·export 모두) · ④ solved .mph 업로드 후 결과 추출<br>
-      동글 없이 되는 작업: ② 케이스 설정(자연어 포함) · ③ 데이터 준비 · 완료된 결과 열람·다운로드
-    </div>
-    <h3>환경 점검</h3>
-    <div class="row">
-      <button class="act" onclick="runQuick()">빠른 점검 (평소용)</button>
-      <button class="ghost" onclick="runDiag()">전체 점검 (최초 1회·문제 발생 시)</button>
-    </div>
-    <div class="hint" style="margin-top:8px">
-      <b>빠른 점검</b>: 동글·COMSOL 버전, CPU/메모리, 데이터·케이스·AI 모드 상태를 수 초~수십 초에 확인
-      (COMSOL 세션이 꺼져 있으면 기동에 시간이 조금 더 걸립니다)<br>
-      <b>전체 점검</b>: Si 예제 솔브까지 포함한 7종 검증 + 모델 구조 덤프 — 처음 설치했거나 이상 동작 시에만 (결과는 ④ 탭)
-    </div>
-    <div style="border-top:1px dashed var(--line);margin-top:12px;padding-top:10px">
-      <b style="font-size:13px">v2 개발 — 차원 확장 스파이크</b>
-      <div class="hint">2D/3D 빌더의 COMSOL API를 확정하는 검증 실행입니다 (2층 평판 다이오드 1회 솔브 + 구조 덤프, 결과는 ④).
-        성공/실패 로그를 Claude에게 회신해 주세요. 이 검증 통과 후에만 2D/3D 케이스 실행을 신뢰할 수 있습니다.</div>
-      <div class="row" style="margin-top:6px">
-        <button class="ghost" onclick="runSpike(2)">2D 스파이크 실행</button>
-        <button class="ghost" onclick="runSpike(3)">3D 스파이크 실행</button>
+    <div id="comsolDiag">
+      <div class="hint" style="border:1px solid #fde68a;background:#fffbeb;border-radius:8px;padding:10px;margin-bottom:12px">
+        🔑 <b>COMSOL 동글(라이선스 키) 안내</b><br>
+        다음 작업은 실제 COMSOL을 실행하므로 <b>동글이 꽂혀 있어야</b> 합니다:
+        환경 점검 · ③ 실행(local·export 모두) · ④ solved .mph 업로드 후 결과 추출<br>
+        동글 없이 되는 작업: ② 케이스 설정(자연어 포함) · ③ 데이터 준비 · 완료된 결과 열람·다운로드
+      </div>
+      <h3>환경 점검 — COMSOL</h3>
+      <div class="row">
+        <button class="act" onclick="runQuick()">빠른 점검 (평소용)</button>
+        <button class="ghost" onclick="runDiag()">전체 점검 (최초 1회·문제 발생 시)</button>
+      </div>
+      <div class="hint" style="margin-top:8px">
+        <b>빠른 점검</b>: 동글·COMSOL 버전, CPU/메모리, 데이터·케이스·AI 모드 상태를 수 초~수십 초에 확인
+        (COMSOL 세션이 꺼져 있으면 기동에 시간이 조금 더 걸립니다)<br>
+        <b>전체 점검</b>: Si 예제 솔브까지 포함한 7종 검증 + 모델 구조 덤프 — 처음 설치했거나 이상 동작 시에만 (결과는 ④ 탭)
       </div>
     </div>
+    <div id="engineDiag" hidden></div>
     <pre id="diagLog" hidden></pre>
   </div>
 
@@ -466,6 +460,7 @@ async function loadEngines() {
   } catch { engines = []; }
   renderEngineBar();
   renderEnginePanel();
+  renderDiagTab();
 }
 function renderEngineBar() {
   $("#engBar").innerHTML = engines.map(e =>
@@ -476,9 +471,37 @@ function switchEngine(id) {
   curEngine = id;
   renderEngineBar();
   renderEnginePanel();
+  renderDiagTab();
   fillCaseSelect();
   renderSchema();
   loadData().catch(()=>{});
+}
+// ① 환경 점검 — 엔진별 분화 (COMSOL만 동글, MATLAB 엔진은 MATLAB, QE는 WSL 등)
+function renderDiagTab() {
+  const isC = curEngine === "comsol";
+  $("#comsolDiag").hidden = !isC;
+  const box = $("#engineDiag");
+  box.hidden = isC;
+  if (isC) return;
+  const e = engOf(curEngine);
+  if (!e.id) { box.innerHTML = ""; return; }
+  box.innerHTML =
+    `<h3>환경 점검 — ${e.name}</h3>` +
+    `<div style="margin-bottom:8px"><span class="engdot ${e.available?'up':'down'}"></span> ` +
+    `<b class="${e.available?'ok':'no'}">${e.available?'사용 가능':'준비 필요'}</b>` +
+    ` — <span class="hint" style="margin:0">${e.detail}</span></div>` +
+    `<div class="hint" style="border:1px solid var(--line2);background:#f8fafc;border-radius:6px;padding:8px 10px;margin-bottom:10px">` +
+    `<b>이 프로그램에 필요한 것</b><br>` + (e.requires||[]).map(r=>"· "+r).join("<br>") + `</div>` +
+    `<div class="row"><button class="act" onclick="checkEngine()">점검 실행</button>` +
+    `<span class="hint" style="margin:0">실제 실행 경로를 가볍게 확인합니다 (결과는 ④). ` +
+    `${curEngine==='ionmonger'||curEngine==='driftfusion' ? 'MATLAB 기동 포함 ~1분.' :
+       curEngine==='qe' ? 'WSL·pw.x 탐지 ~20초.' : '수 초.'} 동글 불필요.</span></div>`;
+}
+async function checkEngine() {
+  try {
+    const r = await api(`/api/engines/${curEngine}/check`, {method:"POST"});
+    openJob(r.job_id);
+  } catch (e) { alert("점검 시작 실패: " + e.message); }
 }
 function engOf(id) { return engines.find(e => e.id === id) || {}; }
 function renderEnginePanel() {
@@ -636,10 +659,8 @@ async function nlApply() {
   }
 }
 
-async function runSpike(dim) {
-  const r = await api(`/api/diagnostics/spike/${dim}`, {method:"POST"});
-  openJob(r.job_id);
-}
+// (v2 스파이크 버튼은 검증 완료로 UI에서 제거 — 백엔드 /api/diagnostics/spike*는
+//  Claude의 개발·디버깅용으로 유지, 2026-07-08)
 async function runCase() {
   const c = cases.find(x => x.id === $("#caseSel").value);
   if (!c) return alert("케이스를 선택하세요 (②)");
@@ -669,20 +690,38 @@ async function deleteCase() {
 }
 
 // ④ 작업
+function jobEngine(j) {
+  // 사용 엔진 판별: 작업 기록의 engine → 케이스 정의 → 종류별 기본값(COMSOL)
+  const eid = j.params.engine ||
+    (cases.find(c => c.id === j.params.case_id) || {}).engine ||
+    (["diagnostics", "quick_check", "case_run", "extract_solved"].includes(j.kind) ||
+     j.kind.startsWith("spike") ? "comsol" : "");
+  const e = engines.find(x => x.id === eid);
+  return e ? e.name : (eid || "?");
+}
 function _jobRow(j) {
   const t = j.id.slice(9, 15).replace(/(..)(..)(..)/, "$1:$2:$3");
   const dim = j.params.dim && String(j.params.dim) !== "1" ? ` (${j.params.dim}D)` : "";
   return `<tr><td style="white-space:nowrap">${t}</td>` +
+    `<td><span class="badge" style="background:#eef4f9;color:#0a58a0;border-color:#c4d9ea">${jobEngine(j)}</span></td>` +
     `<td>${j.kind}${j.params.case_id ? ": " + j.params.case_id : ""}${dim}</td>` +
     `<td><span class="badge b-${j.status}">${j.status}</span></td>` +
     `<td>${(j.message || "").slice(0, 60)}</td>` +
     `<td><button class="ghost" onclick="openJob('${j.id}')">보기</button></td></tr>`;
 }
 async function loadJobs() {
-  const js = await api("/api/jobs");
-  // 열림 상태 보존 (재렌더 시 사용자가 펼친 날짜 유지)
+  let js;
+  try {
+    js = await api("/api/jobs");
+  } catch (e) {  // 서버 재시작(reload) 순간 등 — 기존 목록을 지우지 않고 유지
+    console.warn("loadJobs 실패:", e);
+    return;
+  }
+  // 열림 상태 보존 (재렌더 시 사용자가 펼친 날짜·'이전 더 보기' 유지)
   const openSet = new Set([...document.querySelectorAll("#jobsList details[data-d]")]
     .filter(x => x.open).map(x => x.dataset.d));
+  const openMore = new Set([...document.querySelectorAll("#jobsList details[data-more]")]
+    .filter(x => x.open).map(x => x.dataset.more));
   const hadAny = document.querySelectorAll("#jobsList details[data-d]").length > 0;
   const groups = {};
   for (const j of js) (groups[j.id.slice(0, 8)] ??= []).push(j);
@@ -691,10 +730,11 @@ async function loadJobs() {
   $("#jobsList").innerHTML = dates.map((d, di) => {
     const g = groups[d];
     const label = `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}  ·  ${g.length}건`;
-    const head = `<table style="margin-top:4px"><thead><tr><th>시각</th><th>종류</th><th>상태</th><th>메시지</th><th></th></tr></thead><tbody>`;
+    const head = `<table style="margin-top:4px"><thead><tr><th>시각</th><th>프로그램</th><th>종류</th><th>상태</th><th>메시지</th><th></th></tr></thead><tbody>`;
     let body = head + g.slice(0, RECENT).map(_jobRow).join("") + `</tbody></table>`;
     if (g.length > RECENT) {
-      body += `<details style="margin:4px 0 0 8px"><summary style="cursor:pointer;font-size:12px;color:#6b7280">이전 ${g.length - RECENT}건 더 보기</summary>` +
+      body += `<details data-more="${d}" ${openMore.has(d) ? "open" : ""} style="margin:4px 0 0 8px">` +
+        `<summary style="cursor:pointer;font-size:12px;color:#6b7280">이전 ${g.length - RECENT}건 더 보기</summary>` +
         head + g.slice(RECENT).map(_jobRow).join("") + `</tbody></table></details>`;
     }
     const open = hadAny ? openSet.has(d) : di === 0;  // 최초엔 최신 날짜만 펼침
@@ -713,6 +753,9 @@ async function refreshDetail() {
   if (!curJob) return;
   try {
     const j = await api(`/api/jobs/${curJob}`);
+    // 작업 상세 헤더에 사용 프로그램 명시 (어떤 엔진의 결과인지 혼동 방지)
+    $("#jdId").textContent = `${curJob} — ${jobEngine(j)}` +
+      (j.params && j.params.case_id ? ` · ${j.params.case_id}` : "");
     const needDongle = j.status === "failed" && /동글|라이선스|license/i.test(j.message || "");
     $("#dongleAlert").hidden = !needDongle;
     if (needDongle) $("#dongleAlert").innerHTML =

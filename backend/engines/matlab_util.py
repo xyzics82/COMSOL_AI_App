@@ -55,3 +55,18 @@ def run_matlab(jid, log, workdir: Path, command: str, timeout_s=3600):
 def matlab_str(s):
     """MATLAB 문자열 리터럴 이스케이프."""
     return "'" + str(s).replace("'", "''") + "'"
+
+
+def check_matlab(jid, log, workdir: Path):
+    """MATLAB 실점검: -batch로 버전 출력 (기동 포함 수십 초 — 동글 불필요)."""
+    ml = find_matlab()
+    if not ml:
+        raise RuntimeError("MATLAB 미탐지 — 설치 후 ② 엔진 패널에 matlab.exe 경로 지정")
+    log(f"MATLAB 탐지: {ml}")
+    rc = run_matlab(jid, log, workdir, "disp(['MATLAB_OK ' version])", timeout_s=300)
+    con = (workdir / "matlab_console.txt").read_text(encoding="utf-8", errors="replace")
+    ver = next((ln for ln in con.splitlines() if "MATLAB_OK" in ln), "")
+    if rc == 0 and ver:
+        log(f"MATLAB -batch 실행 OK: {ver.replace('MATLAB_OK', '').strip()}")
+        return True
+    raise RuntimeError(f"MATLAB -batch 점검 실패 (코드 {rc}) — matlab_console.txt 확인")

@@ -187,6 +187,30 @@ def _run_sq_limit(jid, params, log):
                comments="", fmt="%.5g")
 
 
+def check(jid, params, log):
+    """환경 점검: 패키지 임포트 + 초소형 TMM 1점 + 데이터 파일. 동글·외부 프로그램 불필요."""
+    try:
+        import solcore
+        log(f"solcore {solcore.__version__} 임포트 OK")
+    except ImportError:
+        raise RuntimeError("solcore 미설치 — install_engines.bat 실행 (인터넷 필요, 1~2분)")
+    tc = _tmm_modules()
+    lam = np.array([550.0])
+    one = np.ones(1)
+    res = tc.coh_tmm("s", np.array([one, one * (2.0 + 0.1j), one]),
+                     [np.inf, 500.0, np.inf], 0.0, lam)
+    s = float(np.asarray(res["R"])[0] + np.asarray(res["T"])[0])
+    assert 0 < s < 1, "TMM 자기검사 실패"
+    log(f"TMM 코어 자기검사 OK (R+T={s:.4f} < 1, 나머지=흡수)")
+    for did in ("am15", "mapbi3_nk"):
+        try:
+            arr = common.load_nk(did) if did == "mapbi3_nk" else common.load_am15()
+            log(f"데이터셋 {did}: {len(arr)}행 OK")
+        except Exception as e:
+            log(f"⚠️ 데이터셋 {did} 미준비({type(e).__name__}) — ③ 데이터 준비 탭 확인")
+    log("Solcore 점검 완료 — 케이스 실행 가능 (동글 불필요)")
+
+
 def run(jid, params, log, case):
     try:
         import solcore  # noqa: F401

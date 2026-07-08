@@ -60,17 +60,23 @@ def _wsl_path(p: Path):
 
 
 def _wsl_distros():
-    """설치된 WSL 배포판 이름 목록 (wsl -l -q 출력은 UTF-16LE — 2026-07-08 확인)."""
+    """설치된 WSL 배포판 이름 목록 (wsl -l -q 출력은 UTF-16LE — 2026-07-08 확인).
+    WSL 부팅 중이면 일시 실패/빈 값이 나올 수 있어 재시도 (2026-07-08 점검 교훈)."""
     exe = wsl_exe()
     if not exe:
         return []
-    try:
-        out = subprocess.run([exe, "-l", "-q"], capture_output=True, timeout=30).stdout
-        txt = out.decode("utf-16-le", errors="ignore").replace("\x00", "")
-        return [ln.strip() for ln in txt.splitlines()
-                if ln.strip() and "docker" not in ln.lower()]
-    except Exception:
-        return []
+    for attempt in range(3):
+        try:
+            out = subprocess.run([exe, "-l", "-q"], capture_output=True, timeout=45).stdout
+            txt = out.decode("utf-16-le", errors="ignore").replace("\x00", "")
+            names = [ln.strip() for ln in txt.splitlines()
+                     if ln.strip() and "docker" not in ln.lower()]
+            if names:
+                return names
+        except Exception:
+            pass
+        time.sleep(3)
+    return []
 
 
 def _run_wsl(jid, log, jd: Path, bash_cmd: str, timeout_s=1800, distro=None):
@@ -154,8 +160,16 @@ _PROBE_CMD = ("command -v pw.x && exit 0; "
 
 
 def _probe_one(jid, log, jd, distro):
-    """한 배포판에서 pw.x 탐색 → (성공?, PATH 프리픽스)."""
-    _run_wsl(jid, log, jd, _PROBE_CMD, 180, distro=distro)
+    """한 배포판에서 pw.x 탐색 → (성공?, PATH 프리픽스).
+    타임아웃/오류는 '없음'으로 처리해 다음 배포판으로 계속 (설치 진행 중 등 대비)."""
+    try:
+        _run_wsl(jid, log, jd, _PROBE_CMD, 180, distro=distro)
+    except jobs.Cancelled:
+        raise
+    except Exception as e:
+        log(f"    probe 실패({type(e).__name__}) — 이 배포판 건너뜀 "
+            "(설치/업데이트 진행 중이면 끝난 뒤 다시 점검)")
+        return False, ""
     con = (jd / "wsl_console.txt").read_text(encoding="utf-8", errors="replace")
     first = con.strip().splitlines()[0] if con.strip() else ""
     if first.startswith("/") and first.endswith("pw.x"):
@@ -174,16 +188,20 @@ def _probe_wsl_qe(jid, log, jd):
     사용자 터미널의 배포판과 wsl 기본 배포판이 다를 수 있음). 반환: (프리픽스, 배포판)."""
     from . import load_settings, save_settings
     s = load_settings()
+    distros = _wsl_distros()  # 선조회 (부팅 지연 대비 재시도 포함) — 아래서 재사용
     saved = s.get("qe_distro", "")
     if saved:
         ok, prefix = _probe_one(jid, log, jd, saved)
         if ok:
             return prefix, saved
-        log(f"  저장된 배포판({saved})에서 못 찾음 — 재탐색")
+        log(f"  저장된 배포판({saved})에서 못 찾음 — 재탐색 (배포판 정리/제거 시 자동 복구)")
     ok, prefix = _probe_one(jid, log, jd, None)  # 기본 배포판
     if ok:
+        if saved:  # 낡은 기억 정리 — 다음부터 기본 배포판 바로 사용
+            save_settings({"qe_distro": ""})
+            log("  → 기본 배포판에서 발견 — 저장된 배포판 이름 초기화")
         return prefix, None
-    distros = _wsl_distros()
+    distros = distros or _wsl_distros()
     log(f"  기본 배포판에 없음 → 설치된 배포판 전체 탐색: {distros}")
     for d in distros:
         ok, prefix = _probe_one(jid, log, jd, d)
@@ -427,6 +445,28 @@ def _gen_bandoffset(jid, params, log):
         f"- average.x 창(awin)={awin}Å, 적층방향 idir={idir} — 03_average.in에서 조정 가능"]))
     log("계면 전위 정렬 덱 생성: scf + pp(plot_num=11) + average.x + 절차 안내")
     log("  ⚠️ 계면 슬랩 CIF는 사용자가 준비 (구조 생성은 이 앱 범위 밖 — VESTA/ASE 활용)")
+
+
+def check(jid, params, log):
+    """환경 점검: WSL·배포판·pw.x/pp.x/average.x/mpirun 실탐지 (동글 불필요, ~20초)."""
+    jd = jobs.job_dir(jid)
+    if not wsl_exe():
+        log("WSL 미설치 — 반출(export) 모드만 사용 가능 (서버에서 실행)")
+        log("QE 점검 완료 (WSL 설치 시 local 모드 활성화: 관리자 PowerShell에서 wsl --install)")
+        return
+    log(f"wsl.exe OK / 설치된 배포판: {_wsl_distros()}")
+    prefix, distro = _probe_wsl_qe(jid, log, jd)
+    tools = "for x in pw.x pp.x average.x mpirun; do command -v $x >/dev/null && echo OK:$x || echo MISSING:$x; done"
+    _run_wsl(jid, log, jd, prefix + tools, 120, distro=distro)
+    con = (jd / "wsl_console.txt").read_text(encoding="utf-8", errors="replace")
+    for ln in con.splitlines():
+        if ln.startswith(("OK:", "MISSING:")):
+            log(("  " + ln).replace("MISSING:", "⚠️ 없음: "))
+    if "MISSING:" in con:
+        log("  일부 도구 없음 — 해당 배포판에서 sudo apt install quantum-espresso 재확인")
+    cached = sorted(PSEUDO_CACHE.glob("*.UPF")) + sorted(PSEUDO_CACHE.glob("*.upf"))
+    log(f"의사퍼텐셜 캐시(data/pseudo): {[p.name for p in cached] or '비어 있음 (Si는 자동 다운로드)'}")
+    log("QE 점검 완료 — 검증 이력: 2026-07-08 Si SCF E2E 통과")
 
 
 def run(jid, params, log, case):
