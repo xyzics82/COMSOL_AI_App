@@ -10,7 +10,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / "work"
 
-COMSOL_APPS = Path(r"C:\Program Files\COMSOL\COMSOL64\Multiphysics_copy1\applications")
+import os as _os
+COMSOL_APPS = Path(_os.environ.get(
+    "COMSOL_ROOT", r"C:\Program Files\COMSOL\COMSOL64\Multiphysics_copy1")) / "applications"
 SRC_MPH = COMSOL_APPS / "Semiconductor_Module" / "Photonic_Devices_and_Sensors" / "si_solar_cell_1d.mph"
 
 

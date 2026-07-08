@@ -1,0 +1,11 @@
+{
+  "id": "qe_cif_scf",
+  "name": "QE 구조 계산 — CIF → SCF/완화 (원자 스케일)",
+  "desc": "임의 결정/슬랩 구조(CIF)의 pw.x 입력 덱 생성(반출 전용). 사용법: 이 케이스 선택 → ③ '결과 가져오기'에 CIF 업로드 → 덱 생성(④) → 서버 실행 → .out 업로드로 수렴·총에너지·밴드갭 판독. 벌크 물성(격자상수, 갭)이나 밴드 오프셋 2단계(벌크 기준값) 계산에 사용. CIF→입력 변환에는 ase 필요(install_engines.bat).",
+  "engine": "qe",
+  "qe_kind": "cif_scf",
+  "schema": [
+    {"key": "relax", "label": "구조 완화 포함 (vc-relax)", "type": "select", "options": ["no", "yes"], "default": "no"}
+  ],
+  "data_requirements": []
+}

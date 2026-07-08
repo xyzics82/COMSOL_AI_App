@@ -1,0 +1,13 @@
+{
+  "id": "qe_si_smoke",
+  "name": "🧪 QE 설치 점검 — Si 벌크 SCF (스모크)",
+  "desc": "Quantum ESPRESSO 파이프라인 전체 점검용: 다이아몬드 Si(a=5.431Å 표준값) SCF. local(WSL) 모드면 덱 생성→Si 의사퍼텐셜 자동 다운로드→WSL에서 pw.x 실행→수렴·총에너지·밴드갭 자동 판독까지 클릭 한 번. export 모드는 덱만 생성해 서버 반출용.",
+  "engine": "qe",
+  "qe_kind": "si_smoke",
+  "schema": [
+    {"key": "nproc", "label": "MPI 코어 수 (WSL/서버)", "type": "number", "default": 8},
+    {"key": "timeout_min", "label": "타임아웃 [분]", "type": "number", "default": 15},
+    {"key": "mode", "label": "실행 방식 (local=WSL에서 즉시 실행 / export=덱만 생성)", "type": "select", "options": ["local", "export"], "default": "local"}
+  ],
+  "data_requirements": []
+}

@@ -1,0 +1,12 @@
+{
+  "id": "solcore_sq_limit",
+  "name": "Shockley-Queisser 상한 — Eg 스윕",
+  "desc": "AM1.5 실측 데이터 + 300K 흑체 복사(복사 재결합 한계)로 계산하는 단일접합 이론 상한. Eg 0.8~2.4eV 곡선 + 대상 Eg(기본 MAPbI3 1.55eV) 지점의 Jsc,max/η,max. 실험·시뮬레이션 결과가 이 상한 대비 어디쯤인지 즉시 확인하는 용도. 수 초 실행, COMSOL 불필요.",
+  "engine": "solcore",
+  "solcore_kind": "sq_limit",
+  "schema": [
+    {"key": "eg_ev", "label": "대상 밴드갭 Eg [eV]", "type": "number", "default": 1.55},
+    {"key": "temp_k", "label": "셀 온도 [K]", "type": "number", "default": 300}
+  ],
+  "data_requirements": ["am15"]
+}

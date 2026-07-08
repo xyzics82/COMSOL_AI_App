@@ -10,7 +10,10 @@ v0 정직한 경계:
   적용 — CTL은 깊이 800nm+ 구간이라 G≈0, 오차 미미(사양서 기록).
 - 금속 저항·버스바 없음(이상 옴익 접점) — 핑거 방향 전류 밀집(crowding)은 v1.
 
-검증 기준: z_tip=Lz(완전 압출)에서 2D IBC와 Jsc 일치 (기준값: W3/g3 wave 17.46 mA/cm²).
+검증 기준: z_tip=Lz(완전 압출)에서 '같은 메시 설정'의 2D IBC와 Jsc 일치.
+(2026-07-08: 기본 메시끼리 2.4% / hmax 120nm·S=1000·IDL 포함 3D 18.90 vs 2D 19.01 = 0.6%)
+절대값은 메시 수렴 필요 — 기본(자동) 메시는 Jsc −24% 과소 (2D CASE_SPEC 6.9절).
+IDL(계면 재결합, 2nm 층) 포함 시 기본 메시는 솔브 실패 → hmax 자동 120nm 안전망.
 확정 API 재사용: Box 선택(entitydim str), 기본 smm1=흡수층 트릭, Sweep 메시(3D 평판 확정).
 """
 from pathlib import Path
@@ -22,6 +25,7 @@ DATA = ROOT / "data"
 
 T_SNO2 = 20.0
 T_NIOX = 10.0
+from .ibc_builder import T_IDL  # 계면 결함층 두께 (2D와 동일 값 공유)
 
 
 def _try_set(node, pairs, log, label):
@@ -46,7 +50,7 @@ def _box3(j, tag, edim, lo, hi):
 
 
 def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, lz_nm, ztip_nm, log,
-          g_profile=None, v0_only=True, vcfg=None):
+          g_profile=None, v0_only=True, vcfg=None, s_ifc_cms=0.0, mesh_hmax_nm=None):
     """반환: (model, area_cm2). area = L × Lz (단위 셀 상면적)."""
     L = w_nm + gap_nm
     hw = w_nm / 2.0
@@ -71,6 +75,11 @@ def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, lz_nm, ztip_nm, log,
     blk("b_abs", (0, 0, 0), (L, H, lz_nm))                     # 기본 흡수층 블록
     blk("b_sno2", (0, 0, 0), (hw, T_SNO2, ztip_nm))            # n쪽 CTL 핑거
     blk("b_niox", (L - hw, 0, 0), (L, T_NIOX, ztip_nm))        # p쪽 CTL 핑거
+    # IDL(계면 결함층): CTL 상면 위 얇은 흡수층 블록 — τ=d/S 등가 (#29, 2D와 동일 방식)
+    t_idl = T_IDL if (s_ifc_cms and s_ifc_cms > 0) else 0.0
+    if t_idl > 0:
+        blk("b_idl_n", (0, T_SNO2, 0), (hw, T_SNO2 + t_idl, ztip_nm))
+        blk("b_idl_p", (L - hw, T_NIOX, 0), (L, T_NIOX + t_idl, ztip_nm))
     geom.run()
     log(f"  지오메트리 OK (IBC 3D 단위셀): W={w_nm/1000:g}um gap={gap_nm/1000:g}um "
         f"Lz={lz_nm/1000:g}um z_tip={ztip_nm/1000:g}um t_abs={t_abs_nm:g}nm")
@@ -79,6 +88,13 @@ def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, lz_nm, ztip_nm, log,
     _box3(j, "d_niox", 3, (L - hw - eps, -eps, -eps), (L + eps, T_NIOX + eps, ztip_nm + eps))
     _box3(j, "b_n", 2, (-eps, -eps, -eps), (hw + eps, eps, ztip_nm + eps))       # SnO2 바닥면
     _box3(j, "b_p", 2, (L - hw - eps, -eps, -eps), (L + eps, eps, ztip_nm + eps))  # NiOx 바닥면
+    # IDL 도메인 선택 (계면 재결합 v1 — 경계 feature는 내부 경계 비활성, ibc_builder 6.8 참조)
+    # 팁 끝면(z=z_tip 수직면)은 면적 미미해 생략 — 사양 기록
+    if t_idl > 0:
+        _box3(j, "d_idl_n", 3, (-eps, T_SNO2 - eps, -eps),
+              (hw + eps, T_SNO2 + t_idl + eps, ztip_nm + eps))
+        _box3(j, "d_idl_p", 3, (L - hw - eps, T_NIOX - eps, -eps),
+              (L + eps, T_NIOX + t_idl + eps, ztip_nm + eps))
 
     # 광생성 (전 도메인 — CTL 구간은 G≈0 깊이라 오차 미미, 헤더 참조)
     if g_profile is not None:
@@ -154,6 +170,9 @@ def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, lz_nm, ztip_nm, log,
     udg.selection().all()
     udg.set("Gn", "G_ph")
     udg.set("Gp", "G_ph")
+    if t_idl > 0:
+        from .ibc_builder import _add_idl_rec
+        _add_idl_rec(semi, log, t_idl, s_ifc_cms, dim=3)
     mc1 = semi.create("mc1", "MetalContact", 2)
     mc1.selection().named("b_n")
     mc2 = semi.create("mc2", "MetalContact", 2)
@@ -167,6 +186,18 @@ def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, lz_nm, ztip_nm, log,
         log("  메시: Sweep (3D 평판 검증에서 확정)")
     except Exception as e:
         log(f"  Sweep 실패({type(e).__name__}) — 기본 메시 (수렴 위험)")
+    if t_idl > 0 and not mesh_hmax_nm:
+        # 안전망: IDL(2nm 층) 포함 시 기본(자동) 메시는 평형 솔브가 실패함 (2026-07-08
+        # 실측: 기본 실패 / hmax 120nm 성공·압출 극한 2D와 0.6% 일치) → 자동 세분
+        mesh_hmax_nm = 120.0
+        log("  메시 자동 세분: hmax=120nm (IDL 2nm 층 안전망 — 기본 메시는 솔브 실패)")
+    if mesh_hmax_nm:  # 촘촘한 메시 (정량용 — 솔브 시간 급증, HPC 권장)
+        try:
+            msh.feature("size").set("custom", "on")
+            msh.feature("size").set("hmax", f"{mesh_hmax_nm:g}[nm]")
+            log(f"  메시 세분: hmax={mesh_hmax_nm:g}nm (HPC용 — 솔브 시간 급증 주의)")
+        except Exception as e:
+            log(f"  메시 세분 실패({type(e).__name__})")
 
     std1 = j.study().create("std1")
     std1.create("semie", "SemiconductorEquilibrium")

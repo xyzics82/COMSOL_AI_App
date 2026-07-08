@@ -1,0 +1,18 @@
+{
+  "id": "driftfusion_cv",
+  "name": "Driftfusion CV 스캔 — 시간의존 이온+캐리어",
+  "desc": "저장소(tools/Driftfusion 동봉)의 3층 페로브스카이트 템플릿(spiro_mapi_tio2)을 장전하고 두께·τ·계면 S만 오버라이드해 왕복 CV 스캔(히스테리시스) 실행. IonMonger과 교차검증용(같은 물리, 다른 구현). doCV/dfana 서명·단위는 실코드 대조 완료 — MATLAB만 설치하면 local 실행 가능. 주의: 템플릿 물성은 Spiro/TiO2 기반(v0), SnO2/NiOx 전체 매핑은 v1.",
+  "engine": "driftfusion",
+  "schema": [
+    {"key": "t_abs_nm", "label": "흡수층 두께 [nm]", "type": "number", "default": 800},
+    {"key": "taun_ns", "label": "흡수층 SRH τ [ns]", "type": "number", "default": 38.7},
+    {"key": "s_ifc_cms", "label": "계면 재결합 속도 S [cm/s]", "type": "number", "default": 1000},
+    {"key": "scan_rate_Vps", "label": "스캔 속도 [V/s]", "type": "number", "default": 0.1},
+    {"key": "v_max", "label": "스캔 최대 전압 [V]", "type": "number", "default": 1.2},
+    {"key": "light_sun", "label": "광 강도 [sun]", "type": "number", "default": 1.0},
+    {"key": "points", "label": "시간 샘플 수", "type": "number", "default": 241},
+    {"key": "timeout_min", "label": "MATLAB 타임아웃 [분]", "type": "number", "default": 30},
+    {"key": "mode", "label": "실행 방식 (local=MATLAB 자동 / export=드라이버만 생성)", "type": "select", "options": ["export", "local"], "default": "export"}
+  ],
+  "data_requirements": []
+}

@@ -50,9 +50,10 @@ def load_case(case_id: str) -> dict:
 
 
 def case_summary(case_id: str) -> dict:
-    """UI 케이스 목록용 (id/name/desc/schema)."""
+    """UI 케이스 목록용 (id/name/desc/schema + engine — 상단 엔진 탭 필터용)."""
     c = load_case(case_id)
-    return {"id": c["id"], "name": c["name"], "desc": c["desc"], "schema": c["schema"]}
+    return {"id": c["id"], "name": c["name"], "desc": c["desc"], "schema": c["schema"],
+            "engine": c.get("engine", "comsol")}
 
 
 def _fill(value, values: dict):

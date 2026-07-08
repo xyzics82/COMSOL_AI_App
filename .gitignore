@@ -11,3 +11,9 @@ work/
 
 # 업로드 원본 보관함 (개인 데이터)
 data/uploads/
+
+# 기계별 경로 설정 (엔진 실행 파일 위치 등 — 커밋 무의미)
+settings.json
+
+# 외부 시뮬레이터 저장소 사본 (tools/README.md 참조 — 각자 라이선스, 재클론 가능)
+tools/

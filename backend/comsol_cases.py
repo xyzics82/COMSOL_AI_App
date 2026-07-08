@@ -21,8 +21,11 @@ import params as PRM  # noqa: E402  (cases/perovskite_thickness/params.py)
 
 from . import jobs  # noqa: E402
 
-SI_MPH = Path(r"C:\Program Files\COMSOL\COMSOL64\Multiphysics_copy1\applications"
-              r"\Semiconductor_Module\Photonic_Devices_and_Sensors\si_solar_cell_1d.mph")
+import os as _os
+_COMSOL_ROOT = Path(_os.environ.get("COMSOL_ROOT",
+                                    r"C:\Program Files\COMSOL\COMSOL64\Multiphysics_copy1"))
+SI_MPH = (_COMSOL_ROOT / "applications" / "Semiconductor_Module"
+          / "Photonic_Devices_and_Sensors" / "si_solar_cell_1d.mph")
 
 CASES = [
     {
@@ -69,6 +72,16 @@ def case_ids():
     return [c["id"] for c in get_cases()]
 
 
+def schema_defaults(case_id):
+    """케이스 schema의 default 값 dict. API 직접 호출 시에도 폼 기본값이 적용되게
+    (누락 시 hpc_only 가드·s_ifc_cms 기본 등이 증발하는 문제 방지, 2026-07-08)."""
+    for c in get_cases():
+        if c.get("id") == case_id:
+            return {f["key"]: f["default"] for f in c.get("schema", [])
+                    if "default" in f and f.get("key")}
+    return {}
+
+
 def run_case(jid, params, log, get_client):
     case_id = str(params.get("case_id"))
     from . import data_prep
@@ -88,6 +101,10 @@ def run_case(jid, params, log, get_client):
     elif (ROOT / "cases" / case_id / "case.json").exists():
         from . import library
         case = library.load_case(case_id)
+        eng = case.get("engine", "comsol")
+        if eng != "comsol":  # 멀티 엔진 디스패치 (2026-07-08) — COMSOL 세션 불필요
+            from . import engines
+            return engines.run_case(eng, jid, params, log, case)
         if case.get("builder") == "ibc2d":
             _run_ibc(jid, params, log, get_client)   # IBC 전용 2D 빌더
         elif case.get("builder") == "ibc3d":
@@ -501,13 +518,35 @@ def _run_perovskite(jid, params, log, get_client):
 
 
 def _write_server_script(jid, mph_files, log):
-    lines = ["@echo off", "rem 오프라인 서버용 배치 솔브 (서버 COMSOL 버전은 6.4 이상이어야 함)"]
+    """오프라인 서버용 배치 (ASCII only). COMSOL 경로는 파일 상단 SET 줄에서 편집."""
+    lines = [
+        "@echo off",
+        "rem Offline batch solve (needs COMSOL 6.4+ and license dongle; no Python).",
+        "rem If comsolbatch is NOT on PATH, edit the next line to your COMSOL bin folder:",
+        "rem   example: set COMSOLBIN=C:\\Program Files\\COMSOL\\COMSOL64\\Multiphysics\\bin\\win64",
+        "set COMSOLBIN=",
+        "if defined COMSOLBIN set PATH=%COMSOLBIN%;%PATH%",
+        "where comsolbatch >nul 2>nul",
+        "if errorlevel 1 goto nocomsol",
+    ]
     for f in mph_files:
         out = f.replace("_unsolved", "_solved")
+        lines.append(f'echo Solving {f} ...')
         lines.append(f'comsolbatch -inputfile "{f}" -outputfile "{out}"')
+    lines += [
+        "echo.",
+        "echo Done. Copy the *_solved.mph files back and upload them in tab 4 of the app.",
+        "pause",
+        "exit /b 0",
+        ":nocomsol",
+        "echo [ERROR] comsolbatch not found.",
+        "echo Edit this file: set COMSOLBIN=...your COMSOL bin\\win64 folder... then run again.",
+        "pause",
+        "exit /b 1",
+    ]
     p = jobs.job_dir(jid) / "run_server.bat"
-    p.write_text("\r\n".join(lines), encoding="utf-8")
-    log(f"서버 실행 스크립트: {p.name}")
+    p.write_text("\r\n".join(lines) + "\r\n", encoding="ascii")
+    log(f"서버 실행 스크립트: {p.name} (COMSOL 경로는 파일 상단 SET 줄에서 지정 가능)")
 
 
 # ---------------- 솔브된 파일 업로드 → 결과 추출 ----------------
@@ -756,7 +795,8 @@ def _run_ibc(jid, params, log, get_client):
         jobs.check_cancel(jid)
         model, area_cm2 = ibc_builder.build(
             client, f"ibc_{w:g}_{g:g}", mats, w * 1000.0, g * 1000.0, t_abs, taun, vcfg, log,
-            g_profile=g_profile)
+            g_profile=g_profile, s_ifc_cms=float(params.get("s_ifc_cms") or 0),
+            mesh_hmax_nm=float(params.get("mesh_hmax_nm") or 0) or None)
         fname = f"ibc_W{w:g}_g{g:g}_unsolved.mph"
         model.save(str(jd / fname))
         client.remove(model)
@@ -840,8 +880,9 @@ def _run_ibc(jid, params, log, get_client):
 def _run_ibc3d(jid, params, log, get_client):
     """IBC 3D 단위 셀 (v4): W×gap 그리드, 핑거 길이·팁 파라미터, Jsc 전용.
 
-    검증 기준: tip_len=finger_len(완전 압출)이면 2D IBC와 Jsc 일치해야 함
-    (W3/g3 wave 기준 17.46 mA/cm², 2026-07-08).
+    검증 기준: tip_len=finger_len(완전 압출)이면 **같은 메시 설정의** 2D IBC와 Jsc가
+    ~2% 내 일치해야 함 (기본 메시끼리 W3/g3 wave: 3D 14.87 vs 2D 14.55, 2026-07-08).
+    절대값은 메시 수렴 필요 — 2D CASE_SPEC 6.9절 (기본 메시는 Jsc −24% 과소).
     """
     from . import ibc3d_builder, library
     client = get_client(log)
@@ -858,9 +899,15 @@ def _run_ibc3d(jid, params, log, get_client):
     taun = f"{float(params.get('taun_ns') or 38.7):g}[ns]"
     mode = params.get("mode", "local")
     gen_mode = str(params.get("gen_mode", "wave_optics"))
+    jv_mode = str(params.get("jv_mode", "jsc_only"))
+    if str(params.get("hpc_only", "")).lower() in ("yes", "true", "1") and mode != "export":
+        raise RuntimeError(
+            "이 케이스는 서버 컴퓨터 전용(HPC)입니다 — 이 PC에서 local 솔브를 막았습니다. "
+            "mode=export로 unsolved+run_server.bat을 만들어 서버에서 돌리세요. "
+            "절차: docs/SERVER_GUIDE.md")
     log(f"IBC 3D 그리드: W {ws} × gap {gs} um → {len(ws)*len(gs)}셀 / 핑거 {lz_um:g}um "
         f"(팁 {tip_um:g}um{' = 압출 극한(2D 대조 검증 모드)' if tip_um >= lz_um else ''}) "
-        f"/ Jsc 전용 / 광생성={gen_mode}")
+        f"/ {'풀 J-V(0-2V/0.05)' if jv_mode == 'full_jv' else 'Jsc 전용'} / 광생성={gen_mode}")
     mats = {
         "absorber": library.material_props("mapbi3")["props"],
         "sno2": library.material_props("sno2")["props"],
@@ -881,7 +928,11 @@ def _run_ibc3d(jid, params, log, get_client):
         jobs.check_cancel(jid)
         model, area_cm2 = ibc3d_builder.build(
             client, f"ibc3d_{w:g}_{g:g}", mats, w * 1000.0, g * 1000.0, t_abs, taun,
-            lz_um * 1000.0, tip_um * 1000.0, log, g_profile=g_profile, v0_only=True)
+            lz_um * 1000.0, tip_um * 1000.0, log, g_profile=g_profile,
+            v0_only=(jv_mode != "full_jv"),
+            vcfg={"start": 0.0, "stop": 2.0, "step": 0.05},
+            s_ifc_cms=float(params.get("s_ifc_cms") or 0),
+            mesh_hmax_nm=(float(params.get("mesh_hmax_nm")) if params.get("mesh_hmax_nm") else None))
         fname = f"ibc3d_W{w:g}_g{g:g}_unsolved.mph"
         model.save(str(jd / fname))
         client.remove(model)
@@ -961,8 +1012,8 @@ def _run_ibc3d(jid, params, log, get_client):
         best = max(ok, key=lambda r: r["Jsc_mA_cm2"])
         log(f"\n최적: W={best['W_um']:g} gap={best['gap_um']:g} → Jsc {best['Jsc_mA_cm2']} mA/cm²")
         if tip_um >= lz_um:
-            log("[검증] 압출 극한 모드 — 같은 W/gap의 2D IBC Jsc와 ~2% 내 일치해야 통과 "
-                "(W3/g3 wave 기준 17.46)")
+            log("[검증] 압출 극한 모드 — '같은 메시 설정'의 2D IBC Jsc와 ~2% 내 일치해야 통과 "
+                "(기본 메시끼리 W3/g3 wave: 2D 14.55. 절대값은 메시 수렴 필요 — 2D 사양 6.9절)")
     if cancelled:
         raise jobs.Cancelled()
 

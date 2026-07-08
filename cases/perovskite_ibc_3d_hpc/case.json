@@ -1,0 +1,25 @@
+{
+  "id": "perovskite_ibc_3d_hpc",
+  "name": "🖥 [서버 전용] 페로브스카이트 IBC 3D — 정밀 그리드 (HPC)",
+  "desc": "⚠️ 이 케이스는 이 PC에서 솔브하지 않습니다 — 컴퓨팅 파워가 좋은 서버 컴퓨터 전용. 실행하면 unsolved .mph + run_server.bat만 생성(export)되며, 서버에서 솔브 후 solved를 ④에 업로드해 결과를 추출합니다. 절차: docs/SERVER_GUIDE.md. 내용: 3D 단위 셀(핑거 끝단 포함), 촘촘한 메시(hmax 조절), 풀 J-V(0~2V/0.05), 계면 재결합 포함, W×gap 그리드.",
+  "builder": "ibc3d",
+  "grid": {
+    "x": {"param": "W_um", "field": "w_list_um", "label": "전극 폭 W [um]"},
+    "y": {"param": "gap_um", "field": "gap_list_um", "label": "간격 gap [um]"}
+  },
+  "schema": [
+    {"key": "w_list_um", "label": "전극 폭 W 목록 [um]", "type": "text", "default": "1,2,3,4,5"},
+    {"key": "gap_list_um", "label": "n/p 간격 gap 목록 [um]", "type": "text", "default": "1,2,3"},
+    {"key": "finger_len_um", "label": "단위 셀 z 길이 [um]", "type": "number", "default": 6},
+    {"key": "tip_len_um", "label": "핑거(CTL) 길이 [um] (< z 길이면 끝단 효과 포함)", "type": "number", "default": 5},
+    {"key": "t_abs_nm", "label": "흡수층 두께 [nm]", "type": "number", "default": 800},
+    {"key": "taun_ns", "label": "흡수층 SRH τ [ns]", "type": "number", "default": 38.7},
+    {"key": "s_ifc_cms", "label": "계면 재결합 속도 S [cm/s]", "type": "number", "default": 1000},
+    {"key": "mesh_hmax_nm", "label": "메시 최대 크기 [nm] (작을수록 촘촘 — 서버용 60~100 권장)", "type": "number", "default": 80},
+    {"key": "jv_mode", "label": "J-V 범위", "type": "select", "options": ["full_jv", "jsc_only"], "default": "full_jv"},
+    {"key": "gen_mode", "label": "광생성 모델", "type": "select", "options": ["wave_optics", "beer_lambert"], "default": "wave_optics"},
+    {"key": "hpc_only", "label": "서버 전용 잠금 (yes=이 PC 솔브 차단)", "type": "select", "options": ["yes"], "default": "yes"},
+    {"key": "mode", "label": "실행 방식 (이 케이스는 export만 허용)", "type": "select", "options": ["export"], "default": "export"}
+  ],
+  "data_requirements": ["am15", "mapbi3_nk"]
+}

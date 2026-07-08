@@ -1,0 +1,19 @@
+{
+  "id": "ionmonger_hysteresis",
+  "name": "IonMonger 히스테리시스 — 스캔 속도별 J-V (이온 이동)",
+  "desc": "이동 이온(공극)+캐리어 결합 1D — COMSOL 모델에 없는 물리. n-i-p(SnO2/MAPbI3/NiOx) 스택에서 스캔 속도별 왕복 J-V → 방향별 지표 + 히스테리시스 지수. 물성은 materials.json 공유(계면 S 포함 — COMSOL IDL 케이스와 조건 대응), parameters.m은 저장소 원본 템플릿을 읽어 값만 치환(실코드 대조 완료, tools/IonMonger 동봉). MATLAB만 설치하면 local 실행 가능 — 그 전엔 export로 덱 생성.",
+  "engine": "ionmonger",
+  "schema": [
+    {"key": "t_abs_nm", "label": "흡수층 두께 [nm]", "type": "number", "default": 800},
+    {"key": "t_etl_nm", "label": "ETL(SnO2) 두께 [nm]", "type": "number", "default": 20},
+    {"key": "t_htl_nm", "label": "HTL(NiOx) 두께 [nm]", "type": "number", "default": 10},
+    {"key": "taun_ns", "label": "흡수층 SRH τ [ns]", "type": "number", "default": 38.7},
+    {"key": "s_ifc_cms", "label": "계면 재결합 속도 S [cm/s] (COMSOL IBC 케이스와 동일 정의)", "type": "number", "default": 1000},
+    {"key": "ion_N0_m3", "label": "이온 공극 밀도 N0 [1/m³] (기본은 IonMonger 템플릿 관행값 — 첫 실행 때 템플릿과 대조)", "type": "text", "default": "1.6e25"},
+    {"key": "scan_rates_Vps", "label": "스캔 속도 목록 [V/s] (쉼표 — 느릴수록 이온 추종·히스테리시스 변화)", "type": "text", "default": "0.1"},
+    {"key": "v_max", "label": "스캔 최대 전압 [V]", "type": "number", "default": 1.2},
+    {"key": "timeout_min", "label": "MATLAB 타임아웃 [분]", "type": "number", "default": 30},
+    {"key": "mode", "label": "실행 방식 (local=MATLAB 자동 / export=덱만 생성)", "type": "select", "options": ["export", "local"], "default": "export"}
+  ],
+  "data_requirements": []
+}

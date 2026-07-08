@@ -1,0 +1,12 @@
+{
+  "id": "qe_interface_bandoffset",
+  "name": "QE 계면 밴드 오프셋 — 전위 정렬 (원자 스케일)",
+  "desc": "계면 슬랩 구조(CIF)에서 평면 평균 정전 전위 V̄(z)를 계산해 두 재료 간 전위 정렬 ΔV̄를 얻는 워크플로우(Van de Walle-Martin 정렬법 1단계). 사용법: 이 케이스를 선택한 뒤 ③ '결과 가져오기'에 계면 슬랩 CIF를 업로드 → 입력 덱(scf+pp+average) 생성 → 서버 실행 → 01_scf.out과 avg.dat를 다시 업로드하면 V̄(z) 플롯 + ΔV̄ 자동 계산. 완전한 ΔEv/ΔEc는 벌크 2건 추가 계산 필요(덱 안 안내). ⚠️ PBE는 밴드갭 과소평가 — 경향·부호 판단용. 계면 슬랩 구조 파일은 사용자가 준비(VESTA/ASE).",
+  "engine": "qe",
+  "qe_kind": "bandoffset",
+  "schema": [
+    {"key": "stack_dir", "label": "적층 방향 (1=x, 2=y, 3=z)", "type": "select", "options": ["3", "1", "2"], "default": "3"},
+    {"key": "avg_window_ang", "label": "매크로 평균 창 [Å] (재료 면간 주기 정도)", "type": "number", "default": 5.0}
+  ],
+  "data_requirements": []
+}

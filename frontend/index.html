@@ -58,6 +58,15 @@
   .field input[type=radio] { width:auto; margin-right:4px; vertical-align:middle; }
   .hint { font-size:11.5px; color:var(--mut); margin-top:6px; line-height:1.55; }
   .ok{color:#1e6b34} .no{color:#a02020}
+  /* 엔진(프로그램) 선택 탭 — 앱 상단부 */
+  .engbar { display:flex; gap:2px; margin-left:18px; align-items:center; flex-wrap:wrap; }
+  .engtab { border:1px solid var(--line); background:#fff; padding:3px 11px 3px 9px; cursor:pointer;
+            font-size:12px; font-family:inherit; border-radius:3px 3px 0 0; color:var(--ink);
+            border-bottom:2px solid transparent; display:flex; align-items:center; gap:5px; }
+  .engtab:hover { background:var(--bhover); }
+  .engtab.on { border-bottom:2px solid var(--b); font-weight:600; background:var(--bsoft); }
+  .engdot { width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .engdot.up { background:#2f9e44; } .engdot.down { background:#c0c7ce; }
   img.art { max-width:100%; border:1px solid var(--line); border-radius:2px; margin-top:8px; background:#fff; }
   h3 { margin:2px 0 10px; font-size:12.5px; font-weight:600; color:var(--ink);
        border-bottom:1px solid var(--line2); padding-bottom:5px; }
@@ -69,8 +78,8 @@
 </head>
 <body>
 <header>
-  <h1>COMSOL AI 앱</h1>
-  <span class="sub">자연어 → 케이스 설정 → 데이터 준비 → 실행 → 결과</span>
+  <h1>시뮬레이션 AI 앱</h1>
+  <div class="engbar" id="engBar" title="시뮬레이션 프로그램 선택"></div>
   <span class="sub" id="hstat" style="margin-left:auto"></span>
 </header>
 <nav>
@@ -128,13 +137,22 @@
             <option value="3">3D 평판 (검증됨 — 1D 대조 편차 ~1%)</option>
           </select>
         </label>
-        <span class="hint">local: 이 PC에서 솔브 (unsolved 전부 생성 후 솔브 — 도중에 내려받아 다른 컴퓨터 병렬 솔브 가능) / export: unsolved만 반출 · 2D/3D 평판은 1D와 같은 지표가 나와야 정상(빌더 검증용)</span>
+        <span class="hint" id="runHint">local: 이 PC에서 솔브 (unsolved 전부 생성 후 솔브 — 도중에 내려받아 다른 컴퓨터 병렬 솔브 가능) / export: unsolved만 반출 · 2D/3D 평판은 1D와 같은 지표가 나와야 정상(빌더 검증용)</span>
+      </div>
+    </div>
+    <div id="importBox" hidden style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
+      <h3>결과 가져오기 (외부 실행분 업로드)</h3>
+      <div class="hint" id="importHint"></div>
+      <div class="row" style="margin-top:6px">
+        <input type="file" id="importFiles" multiple style="font-size:12px">
+        <button class="act" onclick="engineImport()">업로드 → 판독</button>
       </div>
     </div>
   </div>
 
   <div class="card" id="tab-run" hidden>
     <h3>케이스 설정</h3>
+    <div id="engPanel" style="border:1px solid var(--line);background:#f8fafc;border-radius:3px;padding:9px 11px;margin-bottom:12px;font-size:12px"></div>
     <div class="field" style="margin-bottom:14px">
       <label>자연어로 설명하면 AI가 케이스를 고르고 아래 폼을 채웁니다</label>
       <textarea id="nlText" rows="2" style="width:100%;max-width:640px;padding:8px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-family:inherit"
@@ -259,6 +277,22 @@ async function runQuick() {
 function updateRunSection(ds) {
   const c = cases.find(x => x.id === $("#caseSel")?.value);
   const btn = $("#runBtn");
+  // 엔진별 UI: 차원 선택은 COMSOL 전용, 결과 가져오기는 import 지원 엔진만
+  const e = engOf(curEngine);
+  const dimLabel = $("#dimSel")?.closest("label");
+  if (dimLabel) dimLabel.style.display = (curEngine === "comsol") ? "" : "none";
+  if (curEngine !== "comsol" && $("#runHint"))
+    $("#runHint").textContent = "local: 이 PC에서 실행 (프로그램 경로 필요 — ② 상단 엔진 패널) / export: 입력 덱·레시피만 생성해 ④에서 다운로드";
+  const ib = $("#importBox");
+  if (ib) {
+    ib.hidden = !(e.import_accept && c);
+    if (!ib.hidden) {
+      $("#importFiles").accept = e.import_accept;
+      $("#importHint").textContent = `${e.name} 실행 결과 파일(${e.import_accept})을 올리면 ` +
+        `선택된 케이스(${c ? c.name : ""}) 기준으로 지표·그림을 자동 생성합니다` +
+        (curEngine === "qe" ? " · CIF를 올리면 입력 덱 생성으로 동작합니다" : "");
+    }
+  }
   if (!c) {
     $("#runInfo").textContent = "케이스를 먼저 선택하세요 (② 탭)";
     if (btn) btn.disabled = true;
@@ -418,15 +452,91 @@ async function registerDraft() {
   }
 }
 
+// 엔진(프로그램) 탭 — 앱 상단부
+let curEngine = "comsol", engines = [], engSettings = {};
+const ENG_SETTING_MAP = {  // 엔진별로 보여줄 설정 키
+  scaps: ["scaps_exe"], ionmonger: ["ionmonger_path", "matlab_exe"],
+  driftfusion: ["driftfusion_path", "matlab_exe"],
+};
+async function loadEngines() {
+  try {
+    const r = await api("/api/engines");
+    engines = r.engines; engSettings = r.settings || {};
+    window._engKeys = r.setting_keys || {};
+  } catch { engines = []; }
+  renderEngineBar();
+  renderEnginePanel();
+}
+function renderEngineBar() {
+  $("#engBar").innerHTML = engines.map(e =>
+    `<button class="engtab ${e.id===curEngine?'on':''}" onclick="switchEngine('${e.id}')" title="${e.detail.replace(/"/g,'&quot;')}">` +
+    `<span class="engdot ${e.available?'up':'down'}"></span>${e.name}</button>`).join("");
+}
+function switchEngine(id) {
+  curEngine = id;
+  renderEngineBar();
+  renderEnginePanel();
+  fillCaseSelect();
+  renderSchema();
+  loadData().catch(()=>{});
+}
+function engOf(id) { return engines.find(e => e.id === id) || {}; }
+function renderEnginePanel() {
+  const e = engOf(curEngine);
+  if (!e.id) { $("#engPanel").innerHTML = ""; return; }
+  let h = `<b>${e.name}</b> <span class="engdot ${e.available?'up':'down'}" style="margin:0 2px"></span>` +
+    `<span class="${e.available?'ok':'no'}">${e.available?'사용 가능':'준비 필요'}</span>` +
+    ` — <span class="hint" style="margin:0">${e.detail}</span>`;
+  const keys = ENG_SETTING_MAP[e.id] || [];
+  if (keys.length) {
+    h += `<div class="row" style="margin-top:7px">` + keys.map(k =>
+      `<label class="hint" style="margin:0">${(window._engKeys||{})[k]||k}<br>` +
+      `<input id="es_${k}" value="${(engSettings[k]||'').replace(/"/g,'&quot;')}" placeholder="경로 입력" ` +
+      `style="width:290px;padding:3px 7px;border:1px solid #b8c1c9;border-radius:2px;font-size:11.5px"></label>`).join("") +
+      `<button class="ghost" style="align-self:flex-end" onclick="saveEngineSettings()">경로 저장</button></div>`;
+  }
+  if (e.id !== "comsol")
+    h += `<div class="hint" style="margin-top:5px">참고: ① 자연어 제안은 현재 COMSOL 케이스 대상입니다. 이 엔진은 아래 케이스 폼으로 설정하세요.</div>`;
+  $("#engPanel").innerHTML = h;
+}
+async function saveEngineSettings() {
+  const body = {};
+  (ENG_SETTING_MAP[curEngine] || []).forEach(k => body[k] = ($("#es_"+k)||{}).value || "");
+  const r = await api("/api/engines/settings", {method:"POST",
+    headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+  engines = r.engines; engSettings = r.settings || {};
+  renderEngineBar(); renderEnginePanel();
+}
+function casesForEngine() { return cases.filter(c => (c.engine || "comsol") === curEngine); }
+function fillCaseSelect() {
+  const list = casesForEngine();
+  $("#caseSel").innerHTML = list.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+  if (!list.length) $("#caseSel").innerHTML = `<option value="">이 엔진의 케이스 없음</option>`;
+}
+async function engineImport() {
+  const c = cases.find(x => x.id === $("#caseSel").value);
+  const files = $("#importFiles").files;
+  if (!c) return alert("케이스를 먼저 선택하세요 (②)");
+  if (!files.length) return alert("파일을 선택하세요");
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f);
+  try {
+    const r = await api(`/api/engines/${curEngine}/import?case_id=${encodeURIComponent(c.id)}`,
+      {method:"POST", body: fd});
+    openJob(r.job_id);
+  } catch (e) { alert("업로드 실패: " + e.message); }
+}
+
 // ③ 케이스
 async function loadCases() {
   cases = await api("/api/cases");
-  $("#caseSel").innerHTML = cases.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+  await loadEngines();
+  fillCaseSelect();
   renderSchema();
 }
 function renderSchema() {
   const c = cases.find(x => x.id === $("#caseSel").value);
-  if (!c) return;
+  if (!c) { $("#caseDesc").textContent = ""; $("#schema").innerHTML = ""; $("#caseData").textContent = ""; return; }
   $("#caseDesc").textContent = c.desc;
   $("#schema").innerHTML = c.schema.map(f => {
     if (f.type === "select")
@@ -532,9 +642,10 @@ async function runSpike(dim) {
 }
 async function runCase() {
   const c = cases.find(x => x.id === $("#caseSel").value);
+  if (!c) return alert("케이스를 선택하세요 (②)");
   const params = {};
   c.schema.forEach(f => params[f.key] = $("#f_"+f.key).value);
-  params.dim = $("#dimSel").value;  // 1=검증됨 / 2·3=평판 검증 중
+  if (curEngine === "comsol") params.dim = $("#dimSel").value;  // 1=검증됨 / 2·3=평판 검증 중
   try {
     const r = await api(`/api/cases/${c.id}/run`, {method:"POST",
       headers:{"Content-Type":"application/json"}, body:JSON.stringify(params)});

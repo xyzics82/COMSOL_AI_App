@@ -1,0 +1,12 @@
+{
+  "id": "solcore_tmm_stack",
+  "name": "Solcore TMM 광학 — R/A/T + G(depth) (COMSOL 파동광학 대조)",
+  "desc": "공기/MAPbI3(t)/공기 평판 TMM(수직입사 TE). R/A/T 스펙트럼, AM1.5 가중 광생성 프로파일 G(depth), 광학 상한 Jsc,opt. COMSOL 파동광학(v3)과 같은 문제 — 검증됨: A(λ) 소수 4자리 일치, 같은 λ그리드(15점)에서 Jsc 22.50 완전 재현 (사양: cases/solcore_tmm_stack/CASE_SPEC.md). COMSOL 없이(동글 없이) 수 초 내 실행.",
+  "engine": "solcore",
+  "solcore_kind": "tmm_stack",
+  "schema": [
+    {"key": "t_abs_list_nm", "label": "흡수층 두께 목록 [nm] (쉼표로 여러 값)", "type": "text", "default": "800"},
+    {"key": "nlam", "label": "파장 샘플 수 (300-850nm. ⚠️ 15점은 간섭 프린지 언더샘플링으로 Jsc ~3% 과대 — 111 권장)", "type": "number", "default": 111}
+  ],
+  "data_requirements": ["am15", "mapbi3_nk"]
+}

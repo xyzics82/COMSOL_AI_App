@@ -17,6 +17,9 @@ API 요약 (에이전트 연동용):
   GET  /api/jobs/{jid}/artifacts         산출물 목록
   GET  /api/jobs/{jid}/artifacts/{name}  산출물 다운로드 (.mph/.png/.csv)
   POST /api/jobs/{jid}/upload_solved     오프라인 서버 솔브본 업로드 → 결과 추출 작업
+  GET  /api/engines                      엔진(COMSOL/Solcore/SCAPS/IonMonger/Driftfusion/QE) 상태
+  POST /api/engines/settings             엔진 경로 설정 (settings.json)
+  POST /api/engines/{eid}/import         외부 실행 결과 업로드 → 판독 작업 (docs/ENGINES.md)
 """
 from pathlib import Path
 
@@ -255,11 +258,52 @@ def run_spike_ibc(body: dict | None = None):
 def run_case(case_id: str, params: dict):
     if case_id not in comsol_cases.case_ids():  # 동적 목록 (등록된 데이터 케이스 포함)
         raise HTTPException(404, "no such case")
-    p = dict(params or {})
+    # schema 기본값 병합 (요청 값이 우선) — API 직접 호출에서도 hpc_only 잠금·
+    # s_ifc_cms 등 기본 파라미터가 유지되게 (2026-07-08: 누락 시 증발 버그)
+    p = comsol_cases.schema_defaults(case_id)
+    p.update(params or {})
     p["case_id"] = case_id
     jid = jobs.create_job("case_run", p)
     runner.submit(jid)
     return {"job_id": jid}
+
+
+# ---------- 멀티 엔진 (2026-07-08): 상단 엔진 탭 + 경로 설정 + 결과 가져오기 ----------
+
+@app.get("/api/engines")
+def engines_list():
+    from . import engines
+    return {"engines": engines.engines_status(),
+            "settings": engines.load_settings(),
+            "setting_keys": engines.SETTING_KEYS}
+
+
+@app.post("/api/engines/settings")
+def engines_settings(body: dict):
+    from . import engines
+    engines.save_settings(body or {})
+    return {"ok": True, "engines": engines.engines_status(),
+            "settings": engines.load_settings()}
+
+
+@app.post("/api/engines/{engine_id}/import")
+async def engine_import(engine_id: str, case_id: str, files: list[UploadFile]):
+    """외부 프로그램 실행 결과 파일 업로드 → 파싱 작업 생성 (SCAPS .iv, MATLAB csv, QE .out 등)."""
+    from . import engines
+    if engine_id not in [e["id"] for e in engines.engines_status()]:
+        raise HTTPException(404, "no such engine")
+    p = comsol_cases.schema_defaults(case_id) if case_id else {}
+    p.update({"engine": engine_id, "case_id": case_id})
+    jid = jobs.create_job("engine_import", p)
+    jd = jobs.job_dir(jid)
+    names = []
+    for f in files:
+        safe = Path(f.filename or "upload.dat").name
+        (jd / safe).write_bytes(await f.read())
+        names.append(safe)
+    jobs.log(jid, f"결과 파일 업로드됨: {', '.join(names)}")
+    runner.submit(jid)
+    return {"job_id": jid, "files": names}
 
 
 @app.get("/api/jobs")

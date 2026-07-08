@@ -14,6 +14,8 @@
     {"key": "taun_ns", "label": "흡수층 SRH τ [ns]", "type": "number", "default": 38.7},
     {"key": "gen_mode", "label": "광생성 모델 (wave_optics=파동광학 v3, 반사·간섭 반영)", "type": "select",
      "options": ["wave_optics", "beer_lambert"], "default": "wave_optics"},
+    {"key": "s_ifc_cms", "label": "계면 재결합 속도 S [cm/s] (0=끔. Yang 2020 스윕 범위 1~1e5 — 공정 의존 파라미터. IDL 2nm 등가 구현, 사양 6.8절)", "type": "number", "default": 1000},
+    {"key": "mesh_hmax_nm", "label": "메시 최대 요소 크기 hmax [nm] (0=자동. ⚠️ 자동(기본) 메시는 Jsc를 크게 과소평가 — 수렴 연구는 사양 6.9절. 정량 결과엔 80 권장, 시간 ~2배)", "type": "number", "default": 80},
     {"key": "mode", "label": "실행 방식", "type": "select", "options": ["local", "export"], "default": "local"}
   ],
   "data_requirements": ["am15", "mapbi3_nk"]
