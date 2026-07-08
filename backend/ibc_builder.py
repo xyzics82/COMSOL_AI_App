@@ -42,9 +42,10 @@ def _box(j, tag, entity_dim, x0, x1, y0, y1, log):
     return sel
 
 
-def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, vcfg, log):
+def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, vcfg, log, g_profile=None):
     """IBC half-cell 모델 생성. mats: {'absorber':props, 'sno2':props, 'niox':props,
-    'niox_na': str, 'sno2_nd': str}. 반환: (model, area_cm2)."""
+    'niox_na': str, 'sno2_nd': str}. g_profile: wo_optics.compute_G_profile 결과(dict)면
+    파동광학 G(depth)를 보간 주입, None이면 Beer-Lambert. 반환: (model, area_cm2)."""
     L = w_nm + gap_nm                    # half-n + gap + half-p
     hw = w_nm / 2.0
     H = T_SNO2 + t_abs_nm                # 전체 높이 (흡수층 윗면)
@@ -95,31 +96,43 @@ def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, vcfg, log):
     _box(j, "b_n", 1, -eps, hw + eps, -eps, eps, log)          # SnO2 바닥 (접지)
     _box(j, "b_p", 1, L - hw - eps, L + eps, -eps, eps, log)   # NiOx 바닥 (V0)
 
-    # 보간 함수 + 광생성 (윗면 y=H에서 하향)
-    from . import data_prep
-    am15 = np.loadtxt(DATA / data_prep.dataset("am15")["file"], encoding="utf-8")
-    f1 = j.func().create("int1", "Interpolation")
-    f1.set("source", "table")
-    f1.set("table", [[str(r[0]), str(r[1])] for r in am15])
-    f1.set("funcname", "F")
-    _try_set(f1, [("argunit", ["nm"]), ("argunit", "nm")], log, "int1")
-    _try_set(f1, [("fununit", ["W/m^2/nm"]), ("fununit", "W/m^2/nm")], log, "int1")
-    nk = np.loadtxt(DATA / data_prep.dataset("mapbi3_nk")["file"], encoding="utf-8")
-    f2 = j.func().create("int2", "Interpolation")
-    f2.set("source", "table")
-    f2.set("table", [[str(r[0]), str(r[2])] for r in nk])
-    f2.set("funcname", "kref")
-    _try_set(f2, [("argunit", ["um"]), ("argunit", "um")], log, "int2")
-    _try_set(f2, [("fununit", ["1"]), ("fununit", "1")], log, "int2")
-    expr = (f"4*pi/(h_const*c_const)*integrate(kref(lm)*F(lm)*"
-            f"exp(-4*pi*kref(lm)*({H:g}[nm]-y)/lm),lm,300[nm],850[nm])")
+    # 광생성 (윗면 y=H에서 하향): 파동광학 프로파일 주입 or Beer-Lambert 적분식
+    if g_profile is not None:
+        f3 = j.func().create("int3", "Interpolation")
+        f3.set("source", "table")
+        f3.set("table", [[f"{d:.2f}", f"{g:.6e}"] for d, g in
+                         zip(g_profile["depth_nm"], g_profile["G"])])
+        f3.set("funcname", "Gwo")
+        _try_set(f3, [("argunit", ["nm"]), ("argunit", "nm")], log, "int3")
+        _try_set(f3, [("fununit", ["1/(m^3*s)"]), ("fununit", "1/(m^3*s)")], log, "int3")
+        expr = f"Gwo({H:g}[nm]-y)"
+        log(f"  광생성 OK: 파동광학 G(depth) 보간 주입 ({len(g_profile['G'])}점, "
+            f"Jsc,opt={g_profile['jsc_wave']:.2f} mA/cm²)")
+    else:
+        from . import data_prep
+        am15 = np.loadtxt(DATA / data_prep.dataset("am15")["file"], encoding="utf-8")
+        f1 = j.func().create("int1", "Interpolation")
+        f1.set("source", "table")
+        f1.set("table", [[str(r[0]), str(r[1])] for r in am15])
+        f1.set("funcname", "F")
+        _try_set(f1, [("argunit", ["nm"]), ("argunit", "nm")], log, "int1")
+        _try_set(f1, [("fununit", ["W/m^2/nm"]), ("fununit", "W/m^2/nm")], log, "int1")
+        nk = np.loadtxt(DATA / data_prep.dataset("mapbi3_nk")["file"], encoding="utf-8")
+        f2 = j.func().create("int2", "Interpolation")
+        f2.set("source", "table")
+        f2.set("table", [[str(r[0]), str(r[2])] for r in nk])
+        f2.set("funcname", "kref")
+        _try_set(f2, [("argunit", ["um"]), ("argunit", "um")], log, "int2")
+        _try_set(f2, [("fununit", ["1"]), ("fununit", "1")], log, "int2")
+        expr = (f"4*pi/(h_const*c_const)*integrate(kref(lm)*F(lm)*"
+                f"exp(-4*pi*kref(lm)*({H:g}[nm]-y)/lm),lm,300[nm],850[nm])")
+        log(f"  광생성 OK: Beer-Lambert (깊이 = {H:g}nm − y), 음영 없음(IBC)")
     try:
         var = comp.variable().create("var1")
     except Exception:
         var = j.variable().create("var1")
         var.model("comp1")
     var.set("G_ph", expr)
-    log(f"  광생성 OK: 윗면 입사(깊이 = {H:g}nm − y), 음영 없음(IBC)")
 
     # 물리: 기본 smm1 = 흡수층 물성(전역), CTL은 국소 재정의
     semi = comp.physics().create("semi", "Semiconductor", "geom1")

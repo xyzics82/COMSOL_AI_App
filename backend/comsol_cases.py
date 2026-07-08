@@ -701,7 +701,36 @@ def _run_ibc(jid, params, log, get_client):
     t_abs = float(params.get("t_abs_nm") or 800)
     taun = f"{float(params.get('taun_ns') or 38.7):g}[ns]"
     mode = params.get("mode", "local")
-    log(f"IBC 그리드: W {ws}um × gap {gs}um → {len(ws)*len(gs)}회 솔브 / t_abs={t_abs:g}nm / mode={mode}")
+    gen_mode = str(params.get("gen_mode", "wave_optics"))
+    log(f"IBC 그리드: W {ws}um × gap {gs}um → {len(ws)*len(gs)}회 솔브 / t_abs={t_abs:g}nm "
+        f"/ mode={mode} / 광생성={gen_mode}")
+    g_profile = None
+    if gen_mode == "wave_optics":
+        from . import wo_optics
+        client_early = get_client(log)
+        g_profile = wo_optics.compute_G_profile(client_early, t_abs, log,
+                                                nlam=int(float(params.get("nlam") or 15)))
+        jd0 = jobs.job_dir(jid)
+        np.savetxt(jd0 / "g_profile.csv",
+                   np.column_stack([g_profile["depth_nm"], g_profile["G"]]),
+                   header="depth_nm G_per_m3s", comments="")
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(figsize=(6.5, 3.6))
+            ax.plot(g_profile["depth_nm"], g_profile["G"])
+            ax.set_xlabel("depth from illuminated face [nm]")
+            ax.set_ylabel("G [1/(m^3 s)]")
+            ax.set_title(f"Wave-optics generation (Jsc,opt {g_profile['jsc_wave']:.2f} mA/cm2)",
+                         fontsize=10)
+            ax.grid(alpha=0.3)
+            fig.tight_layout()
+            fig.savefig(jd0 / "g_profile.png", dpi=140)
+        except Exception as e:
+            log(f"  G 프로파일 그림 실패({type(e).__name__}) — CSV는 저장됨")
+        log(f"⚠️ 참고: 파동광학 모드 — Beer-Lambert 대비 반사 손실 반영 "
+            f"(Jsc 상한 {g_profile['jsc_wave']:.2f}, BL이었다면 {g_profile['jsc_bl']:.2f} mA/cm²)")
     mats = {
         "absorber": library.material_props("mapbi3")["props"],
         "sno2": library.material_props("sno2")["props"],
@@ -724,7 +753,8 @@ def _run_ibc(jid, params, log, get_client):
     for i, (w, g) in enumerate(combos, 1):
         jobs.check_cancel(jid)
         model, area_cm2 = ibc_builder.build(
-            client, f"ibc_{w:g}_{g:g}", mats, w * 1000.0, g * 1000.0, t_abs, taun, vcfg, log)
+            client, f"ibc_{w:g}_{g:g}", mats, w * 1000.0, g * 1000.0, t_abs, taun, vcfg, log,
+            g_profile=g_profile)
         fname = f"ibc_W{w:g}_g{g:g}_unsolved.mph"
         model.save(str(jd / fname))
         client.remove(model)
@@ -754,7 +784,8 @@ def _run_ibc(jid, params, log, get_client):
                 model.solve(s.name())
             V, I, _ = _extract_iv(model, log)
             m, Jgen = _metrics(V, I, area_cm2, pin, log)
-            eta = m["Jsc_mA_cm2"] / 26.261  # 1D 평판 상한(t_abs 800nm 기준) 대비 수집효율
+            jsc_ref = g_profile["jsc_wave"] if g_profile else 26.261  # 광학 상한 대비 수집효율
+            eta = m["Jsc_mA_cm2"] / jsc_ref
             rows.append({"W_um": w, "gap_um": g, "eta_col": round(eta, 4), **m})
             log(f"  수집효율(1D 800nm 대비): {eta:.1%}")
             curves.append((f"W={w:g} g={g:g}", V, Jgen))

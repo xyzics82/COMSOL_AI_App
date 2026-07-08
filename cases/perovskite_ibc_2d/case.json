@@ -12,6 +12,8 @@
     {"key": "gap_list_um", "label": "n/p 간격 gap 목록 [um]", "type": "text", "default": "1,3,5"},
     {"key": "t_abs_nm", "label": "흡수층 두께 [nm]", "type": "number", "default": 800},
     {"key": "taun_ns", "label": "흡수층 SRH τ [ns]", "type": "number", "default": 38.7},
+    {"key": "gen_mode", "label": "광생성 모델 (wave_optics=파동광학 v3, 반사·간섭 반영)", "type": "select",
+     "options": ["wave_optics", "beer_lambert"], "default": "wave_optics"},
     {"key": "mode", "label": "실행 방식", "type": "select", "options": ["local", "export"], "default": "local"}
   ],
   "data_requirements": ["am15", "mapbi3_nk"]
