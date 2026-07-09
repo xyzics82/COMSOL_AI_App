@@ -926,20 +926,40 @@ def _run_ibc3d(jid, params, log, get_client):
     log(f"\n[1단계] unsolved 모델 {len(combos)}개 생성")
     for i, (w, g) in enumerate(combos, 1):
         jobs.check_cancel(jid)
-        model, area_cm2 = ibc3d_builder.build(
-            client, f"ibc3d_{w:g}_{g:g}", mats, w * 1000.0, g * 1000.0, t_abs, taun,
-            lz_um * 1000.0, tip_um * 1000.0, log, g_profile=g_profile,
-            v0_only=(jv_mode != "full_jv"),
-            vcfg={"start": 0.0, "stop": 2.0, "step": 0.05},
-            s_ifc_cms=float(params.get("s_ifc_cms") or 0),
-            mesh_hmax_nm=(float(params.get("mesh_hmax_nm")) if params.get("mesh_hmax_nm") else None),
-            n_pairs=int(float(params.get("n_pairs") or 0)))
-        fname = f"ibc3d_W{w:g}_g{g:g}_unsolved.mph"
-        model.save(str(jd / fname))
-        client.remove(model)
-        files[(w, g)] = (fname, area_cm2)
-        log(f"  [{i}/{len(combos)}] unsolved 저장: {fname}")
-    _write_server_script(jid, [files[c][0] for c in combos], log)
+        # 조합별 보호 + 1회 재시도 (2026-07-09 서버: 45번째 생성에서 COMSOL 세션 NPE로
+        # 배치 전체가 죽음 — 장시간 생성 반복 후 세션 일시 불안정 대비)
+        for attempt in (1, 2):
+            model = None
+            try:
+                model, area_cm2 = ibc3d_builder.build(
+                    client, f"ibc3d_{w:g}_{g:g}", mats, w * 1000.0, g * 1000.0, t_abs, taun,
+                    lz_um * 1000.0, tip_um * 1000.0, log, g_profile=g_profile,
+                    v0_only=(jv_mode != "full_jv"),
+                    vcfg={"start": 0.0, "stop": 2.0, "step": 0.05},
+                    s_ifc_cms=float(params.get("s_ifc_cms") or 0),
+                    mesh_hmax_nm=(float(params.get("mesh_hmax_nm")) if params.get("mesh_hmax_nm") else None),
+                    n_pairs=int(float(params.get("n_pairs") or 0)))
+                fname = f"ibc3d_W{w:g}_g{g:g}_unsolved.mph"
+                model.save(str(jd / fname))
+                files[(w, g)] = (fname, area_cm2)
+                log(f"  [{i}/{len(combos)}] unsolved 저장: {fname}")
+                break
+            except Exception as e:
+                log(f"  ✖ 빌드 실패 W{w:g}/g{g:g} (시도 {attempt}/2 — "
+                    f"{type(e).__name__}: {str(e)[:140]})")
+                if attempt == 1:
+                    log("    → 모델 정리 후 재시도")
+            finally:
+                try:
+                    if model is not None:
+                        client.remove(model)
+                except Exception:
+                    pass
+        if (w, g) not in files:
+            log(f"  [{i}/{len(combos)}] 건너뜀 (빌드 2회 실패): W{w:g}/g{g:g}")
+    if not files:
+        raise RuntimeError("모든 조합의 모델 생성이 실패했습니다 — 로그 회신 요청")
+    _write_server_script(jid, [files[c][0] for c in combos if c in files], log)
     if mode == "export":
         log("반출용 생성 완료")
         return
@@ -955,6 +975,12 @@ def _run_ibc3d(jid, params, log, get_client):
             log(f"\n[중단 요청] 남은 {len(combos)-i+1}건 건너뜀")
             cancelled = True
             break
+        if (w, g) not in files:  # 1단계 빌드 실패 조합 — NaN 행으로 기록하고 스킵
+            rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": float("nan"),
+                         "eta_col": float("nan"),
+                         **({"Voc_V": float("nan"), "FF": float("nan"),
+                             "PCE_pct": float("nan")} if jv_mode == "full_jv" else {})})
+            continue
         fname, area_cm2 = files[(w, g)]
         log(f"\n===== [{i}/{len(combos)}] W={w:g}um, gap={g:g}um =====")
         model = None
