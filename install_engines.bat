@@ -8,7 +8,7 @@ if not exist .venv\Scripts\pip.exe (
   exit /b 1
 )
 echo Installing optional engine packages into .venv ...
-.venv\Scripts\pip install solcore ase scipy h5py
+.venv\Scripts\pip install solcore ase scipy h5py psutil
 echo.
 echo Done. Restart the app (start.bat) and check the engine tabs.
 pause

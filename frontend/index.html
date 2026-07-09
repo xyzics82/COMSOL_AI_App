@@ -87,6 +87,16 @@
   <button data-tab="run">② 케이스 설정</button>
   <button data-tab="data">③ 데이터 준비·실행</button>
   <button data-tab="jobs">④ 작업·결과</button>
+  <div id="sysmon" style="position:fixed;left:6px;bottom:6px;width:218px;z-index:60;background:var(--chrome);border:1px solid var(--line);border-radius:4px;padding:6px 6px 4px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+    <div style="font-size:10.5px;font-weight:600;color:var(--mut);padding:0 4px 3px">시스템 사용량</div>
+    <div id="smNow" style="font-size:10.5px;padding:0 4px 4px;line-height:1.5">측정 중...</div>
+    <div id="smWrap" style="position:relative;overflow-x:auto;border:1px solid var(--line2);background:#fff;border-radius:2px">
+      <canvas id="smCv" height="64"></canvas>
+      <div id="smMarks" style="position:absolute;top:0;left:0;height:100%;pointer-events:auto"></div>
+    </div>
+    <div style="font-size:9.5px;color:var(--mut);padding:3px 4px;line-height:1.4">
+      ◀ 왼쪽 스크롤 = 지난 4시간<br>세로선 = 작업 시작/종료 (마우스 올리면 작업명)</div>
+  </div>
 </nav>
 <main>
   <div class="card" id="tab-diag">
@@ -872,6 +882,66 @@ async function uploadSolved() {
   const r = await api(`/api/jobs/${curJob}/upload_solved`, {method:"POST", body:fd});
   openJob(r.job_id);
 }
+
+// ---- 시스템 사용량 모니터 (좌측 하단, 2026-07-09) ----
+let smData = [], smEvents = [], smLastT = 0, smTotalGB = 0, smActive = true, smAutoScroll = true;
+async function smPoll() {
+  try {
+    const d = await api("/api/sysmon?since=" + smLastT);
+    if (!d.active) { $("#smNow").textContent = d.reason || "비활성"; smActive = false; return; }
+    smTotalGB = d.ram_total_gb;
+    if (d.samples.length) { smData.push(...d.samples); if (smData.length > 7200) smData = smData.slice(-7200); }
+    if (d.events.length) { smEvents.push(...d.events); if (smEvents.length > 400) smEvents = smEvents.slice(-400); }
+    smLastT = d.now;
+    smRender();
+  } catch {}
+}
+function smRender() {
+  const cv = $("#smCv");
+  if (!cv || !smData.length) return;
+  const w = Math.max(206, smData.length);  // 샘플당 1px — 과거는 가로 스크롤
+  cv.width = w;
+  const ctx = cv.getContext("2d");
+  ctx.clearRect(0, 0, w, 64);
+  const t0 = smData[0][0], t1 = smData[smData.length - 1][0], span = Math.max(1, t1 - t0);
+  const X = t => (t - t0) / span * (w - 1);
+  function line(idx, color) {
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1;
+    let started = false;
+    for (const s of smData) {
+      const v = s[idx];
+      if (v == null) continue;
+      const x = X(s[0]), y = 63 - v / 100 * 62;
+      started ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      started = true;
+    }
+    ctx.stroke();
+  }
+  line(1, "#0079c2");                                   // CPU
+  line(2, "#e8590c");                                   // RAM %
+  if (smData.some(s => s[4] != null)) line(4, "#7048e8"); // GPU
+  const mk = $("#smMarks");
+  mk.style.width = w + "px";
+  mk.innerHTML = smEvents.filter(e => e[0] >= t0 && e[0] <= t1).map(e => {
+    const x = X(e[0]);
+    const c = e[1] === "start" ? "#0079c2" : (e[4] === "failed" ? "#c92a2a" : "#868e96");
+    const tip = `${e[1] === "start" ? "▶ 시작" : "■ 종료" + (e[4] ? " (" + e[4] + ")" : "")}: ${e[3]} — ${e[2]}`;
+    return `<div title="${tip.replace(/"/g, "&quot;")}" style="position:absolute;left:${Math.max(0, x - 2)}px;top:0;width:5px;height:100%;cursor:help">` +
+           `<div style="margin-left:2px;width:1px;height:100%;background:${c}"></div></div>`;
+  }).join("");
+  const L = smData[smData.length - 1];
+  $("#smNow").innerHTML = `CPU <b style="color:#0079c2">${L[1]}%</b> · ` +
+    `RAM <b style="color:#e8590c">${L[2]}%</b> <span style="color:var(--mut)">(${L[3]}/${smTotalGB}GB)</span>` +
+    (L[4] != null ? `<br>GPU <b style="color:#7048e8">${L[4]}%</b> <span style="color:var(--mut)">(VRAM ${L[5]}GB)</span>` : "");
+  const wrap = $("#smWrap");
+  if (smAutoScroll) wrap.scrollLeft = wrap.scrollWidth;
+}
+document.getElementById("smWrap")?.addEventListener("scroll", () => {
+  const el = $("#smWrap");
+  smAutoScroll = el.scrollLeft + el.clientWidth >= el.scrollWidth - 8;  // 끝으로 돌아오면 자동 따라감 재개
+});
+setInterval(() => { if (smActive) smPoll(); }, 5000);
+smPoll();
 
 loadCases(); loadJobs(); nlStatusCheck(); nlModeChanged();
 </script>

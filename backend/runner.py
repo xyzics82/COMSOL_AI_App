@@ -73,6 +73,10 @@ def _work_loop():
             _q.task_done()
             continue
         jobs.set_status(jid, "running")
+        from . import sysmon  # 사용량 그래프의 작업 시작/종료 마커 (2026-07-09)
+        _label = job["params"].get("case_id") or job["params"].get("engine") or job["kind"]
+        sysmon.add_event("start", jid, _label)
+        _final = "done"
         try:
             handler = handlers.get(job["kind"])
             if handler is None:
@@ -81,12 +85,15 @@ def _work_loop():
             jobs.set_status(jid, "done")
             log("작업 완료")
         except jobs.Cancelled:
+            _final = "cancelled"
             jobs.set_status(jid, "cancelled", "사용자 요청으로 중단 — 완료분 결과는 산출물에 보존")
             log("작업 중단됨 (사용자 요청) — 그때까지 완료된 결과는 산출물에 남아 있습니다")
         except Exception as e:
+            _final = "failed"
             jobs.set_status(jid, "failed", str(e)[:500])
             log("작업 실패:\n" + traceback.format_exc())
         finally:
+            sysmon.add_event("end", jid, _label, _final)
             _q.task_done()
 
 

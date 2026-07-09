@@ -932,7 +932,8 @@ def _run_ibc3d(jid, params, log, get_client):
             v0_only=(jv_mode != "full_jv"),
             vcfg={"start": 0.0, "stop": 2.0, "step": 0.05},
             s_ifc_cms=float(params.get("s_ifc_cms") or 0),
-            mesh_hmax_nm=(float(params.get("mesh_hmax_nm")) if params.get("mesh_hmax_nm") else None))
+            mesh_hmax_nm=(float(params.get("mesh_hmax_nm")) if params.get("mesh_hmax_nm") else None),
+            n_pairs=int(float(params.get("n_pairs") or 0)))
         fname = f"ibc3d_W{w:g}_g{g:g}_unsolved.mph"
         model.save(str(jd / fname))
         client.remove(model)
@@ -965,9 +966,10 @@ def _run_ibc3d(jid, params, log, get_client):
                 log(f"  솔브: {s.name()}")
                 model.solve(s.name())
                 log(f"    완료 {_t.time()-t0:.1f}s")
+            model.save(str(jd / fname.replace("_unsolved", "_solved")))  # 솔브 성공 즉시 보존
             if jv_mode == "full_jv":
                 # 풀 J-V: 스윕 데이터셋 자동 탐색 → 지표(Jsc/Voc/FF/PCE) + J-V 곡선 축적
-                V, I_A = _extract_iv(model, log)
+                V, I_A, _expr = _extract_iv(model, log)  # 3-튜플 (2026-07-09 unpack 버그 수정)
                 m, Jgen = _metrics(V, I_A, area_cm2, pin, log)
                 jsc = m["Jsc_mA_cm2"]
                 eta = jsc / jsc_ref if jsc == jsc else float("nan")
@@ -1001,11 +1003,15 @@ def _run_ibc3d(jid, params, log, get_client):
                 rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": round(jsc, 3),
                              "eta_col": round(eta, 4)})
                 log(f"  Jsc = {jsc:.3f} mA/cm² (수집효율 {eta:.1%}, 광학 상한 {jsc_ref:.2f})")
-            model.save(str(jd / fname.replace("_unsolved", "_solved")))
+            # (solved 저장은 솔브 직후 위에서 수행 — 평가 오류가 나도 해는 보존됨)
         except Exception as e:
             log(f"  ✖ 셀 실패 ({type(e).__name__}: {str(e)[:180]}) — 다음 진행")
-            rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": float("nan"),
-                         "eta_col": float("nan")})
+            fail_row = {"W_um": w, "gap_um": g, "Jsc_mA_cm2": float("nan"),
+                        "eta_col": float("nan")}
+            if jv_mode == "full_jv":  # 히트맵 키 일치 (실패행 KeyError 방지, 2026-07-09)
+                fail_row.update({"Voc_V": float("nan"), "FF": float("nan"),
+                                 "PCE_pct": float("nan")})
+            rows.append(fail_row)
         finally:
             try:
                 if model is not None:

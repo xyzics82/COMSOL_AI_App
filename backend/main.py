@@ -41,6 +41,15 @@ app = FastAPI(title="COMSOL AI App", version="0.2")
 @app.on_event("startup")
 def _startup():
     runner.start_worker()
+    from . import sysmon
+    sysmon.start()
+
+
+@app.get("/api/sysmon")
+def sysmon_data(since: float = 0.0):
+    """시스템 사용량 샘플(2s 간격, 최근 4h)·작업 시작/종료 이벤트 — 좌측 모니터 패널용."""
+    from . import sysmon
+    return sysmon.data(since)
 
 
 @app.get("/")

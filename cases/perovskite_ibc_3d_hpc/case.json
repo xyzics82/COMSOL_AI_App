@@ -15,7 +15,7 @@
     {"key": "t_abs_nm", "label": "흡수층 두께 [nm]", "type": "number", "default": 800},
     {"key": "taun_ns", "label": "흡수층 SRH τ [ns]", "type": "number", "default": 38.7},
     {"key": "s_ifc_cms", "label": "계면 재결합 속도 S [cm/s]", "type": "number", "default": 1000},
-    {"key": "mesh_hmax_nm", "label": "메시 최대 크기 [nm] (작을수록 촘촘 — 서버용 60~100 권장)", "type": "number", "default": 80},
+    {"key": "mesh_hmax_nm", "label": "메시 최대 크기 [nm] (120 권장 — ⚠️ 80은 끝단+계면S 3D에서 평형 수렴 실패 확인 2026-07-09)", "type": "number", "default": 120},
     {"key": "jv_mode", "label": "J-V 범위", "type": "select", "options": ["full_jv", "jsc_only"], "default": "full_jv"},
     {"key": "gen_mode", "label": "광생성 모델", "type": "select", "options": ["wave_optics", "beer_lambert"], "default": "wave_optics"},
     {"key": "hpc_only", "label": "서버 전용 잠금 (yes=이 PC 솔브 차단)", "type": "select", "options": ["yes"], "default": "yes"},

@@ -1,7 +1,7 @@
 {
   "id": "perovskite_ibc_3d_server",
   "name": "🌙 [서버 local·밤샘] IBC 3D 정밀 그리드 — 풀 솔브 + solved 저장",
-  "desc": "HPC 반출 케이스의 '그 자리에서 끝까지 솔브' 버전. 앱을 통째로 복사한 서버(방법 B, docs/SERVER_GUIDE.md)에서 local로 실행해 두고 퇴근하는 용도: 조합별로 솔브 → *_solved.mph 저장 → J-V 지표(Jsc/Voc/FF/PCE) 추출 → 종료 시 히트맵 4종 + J-V 곡선 + CSV까지 자동 생성. 실패 조합은 건너뛰고 계속 진행, 중간 취소해도 완료분 보존. ⚠️ 장시간 작업: 기본 15조합×hmax 80nm×풀 J-V(41점)는 조합당 수십 분 — 밤샘 규모. 이 PC에서도 실행은 되지만 낮 작업을 막으므로 서버 권장. 잠금(hpc_only)은 없음.",
+  "desc": "HPC 반출 케이스의 '그 자리에서 끝까지 솔브' 버전 — 서버(방법 B)에서 local로 실행해 두고 퇴근하는 용도. 조합별 솔브 → 솔브 직후 *_solved.mph 즉시 저장(평가 오류가 나도 해 보존) → J-V 지표(Jsc/Voc/FF/PCE) → 종료 시 히트맵 4종+J-V 곡선+CSV. 실패 조합은 건너뛰고 계속, 취소해도 완료분 보존. n_pairs≥1이면 깍지 전극 실배치(각 n개, 가장자리 효과 포함), 0이면 주기 단위셀 근사. ⚠️ 시간: 단위셀×풀J-V×120nm ≈ 조합당 ~30분, 5쌍 배열은 조합당 수 시간 — 그리드 크기를 시간에 맞게 조절하세요. ⚠️ gap 0.5um 등 극단 조합은 수렴 실패로 건너뛸 수 있음(로그 확인).",
   "builder": "ibc3d",
   "grid": {
     "x": {"param": "W_um", "field": "w_list_um", "label": "전극 폭 W [um]"},
@@ -12,10 +12,11 @@
     {"key": "gap_list_um", "label": "n/p 간격 gap 목록 [um]", "type": "text", "default": "1,2,3"},
     {"key": "finger_len_um", "label": "단위 셀 z 길이 [um]", "type": "number", "default": 6},
     {"key": "tip_len_um", "label": "핑거(CTL) 길이 [um] (< z 길이 = 끝단 효과 포함)", "type": "number", "default": 5},
+    {"key": "n_pairs", "label": "깍지 전극 쌍 수 (0=주기 단위셀[검증됨·권장] / n=실배치. ⚠️ 배열 모드는 메시 OK이나 평형 수렴이 아직 미검증(2026-07-09 W2·W3 발산) — Claude와 수렴 개선 후 사용. 계산량 ≈ 단위셀×2×쌍수)", "type": "number", "default": 0},
     {"key": "t_abs_nm", "label": "흡수층 두께 [nm]", "type": "number", "default": 800},
     {"key": "taun_ns", "label": "흡수층 SRH τ [ns]", "type": "number", "default": 38.7},
     {"key": "s_ifc_cms", "label": "계면 재결합 속도 S [cm/s] (IDL 2nm 등가)", "type": "number", "default": 1000},
-    {"key": "mesh_hmax_nm", "label": "메시 최대 크기 [nm] (80=정량 검증 대역, 60=더 촘촘·시간 ~2배)", "type": "number", "default": 80},
+    {"key": "mesh_hmax_nm", "label": "메시 최대 크기 [nm] (120 권장 — 정량 대역이며 검증됨. ⚠️ 80은 끝단+계면S 3D에서 평형 수렴 실패 확인 2026-07-09)", "type": "number", "default": 120},
     {"key": "nlam", "label": "광학 λ 샘플 수 (15점은 Jsc,opt ~3% 과대 — 31 권장, 광학은 1회만 계산)", "type": "number", "default": 31},
     {"key": "jv_mode", "label": "J-V 범위", "type": "select", "options": ["full_jv", "jsc_only"], "default": "full_jv"},
     {"key": "gen_mode", "label": "광생성 모델", "type": "select", "options": ["wave_optics", "beer_lambert"], "default": "wave_optics"},
