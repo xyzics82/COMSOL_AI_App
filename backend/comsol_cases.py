@@ -117,6 +117,21 @@ def run_case(jid, params, log, get_client):
 
 # ---------------- 공통: J-V 추출/지표/플롯 ----------------
 
+def _sweep_points(model):
+    """스윕(V0 배열) 데이터셋의 점 수 — 발산한 셀의 부분 해 존재 여부 판단용 (2026-07-10)."""
+    try:
+        for d in (model / "datasets").children():
+            try:
+                v = np.ravel(np.array(model.evaluate("V0", dataset=d.name()), dtype=float))
+                if v.size >= 5:
+                    return int(v.size)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return 0
+
+
 def _extract_iv(model, log):
     """전압 스윕 결과에서 (V, I) 배열 추출.
 
@@ -935,7 +950,10 @@ def _run_ibc3d(jid, params, log, get_client):
                     client, f"ibc3d_{w:g}_{g:g}", mats, w * 1000.0, g * 1000.0, t_abs, taun,
                     lz_um * 1000.0, tip_um * 1000.0, log, g_profile=g_profile,
                     v0_only=(jv_mode != "full_jv"),
-                    vcfg={"start": 0.0, "stop": 2.0, "step": 0.05},
+                    # 스윕 상한 기본 1.3V (2026-07-10 서버 밤샘 교훈: 0-2V는 Voc~1.05V를
+                    # 훌쩍 넘긴 강한 순방향에서 뉴턴 발산 — 14/30건이 스윕 중 사망)
+                    vcfg={"start": 0.0, "stop": float(params.get("v_max") or 1.3),
+                          "step": float(params.get("v_step") or 0.05)},
                     s_ifc_cms=float(params.get("s_ifc_cms") or 0),
                     mesh_hmax_nm=(float(params.get("mesh_hmax_nm")) if params.get("mesh_hmax_nm") else None),
                     n_pairs=int(float(params.get("n_pairs") or 0)))
@@ -987,11 +1005,32 @@ def _run_ibc3d(jid, params, log, get_client):
         try:
             import time as _t
             model = client.load(str(jd / fname))
-            for s in (model / "studies").children():
-                t0 = _t.time()
-                log(f"  솔브: {s.name()}")
-                model.solve(s.name())
-                log(f"    완료 {_t.time()-t0:.1f}s")
+            # 솔브 (+평형 발산 시 메시 150nm 완화 1회 재시도 — 2026-07-10 서버 밤샘에서
+            #  Study 1 발산 13/30건 교훈. 스윕 부분 데이터가 남았으면 재솔브 대신 회수 우선)
+            last_err = None
+            for attempt in (1, 2):
+                try:
+                    for s in (model / "studies").children():
+                        t0 = _t.time()
+                        log(f"  솔브: {s.name()}" + (" (재시도)" if attempt == 2 else ""))
+                        model.solve(s.name())
+                        log(f"    완료 {_t.time()-t0:.1f}s")
+                    last_err = None
+                    break
+                except Exception as e_s:
+                    last_err = e_s
+                    if jv_mode == "full_jv" and _sweep_points(model) >= 5:
+                        log("  (스윕 부분 데이터 감지 — 재솔브 대신 부분 회수로 전환)")
+                        break
+                    if attempt == 1:
+                        try:
+                            model.java.mesh("mesh1").feature("size").set("custom", "on")
+                            model.java.mesh("mesh1").feature("size").set("hmax", "150[nm]")
+                            log(f"  ✖ 솔브 실패({str(e_s)[:90]}) → 메시 150nm 완화 후 재시도")
+                        except Exception:
+                            break
+            if last_err is not None:
+                raise last_err
             model.save(str(jd / fname.replace("_unsolved", "_solved")))  # 솔브 성공 즉시 보존
             if jv_mode == "full_jv":
                 # 풀 J-V: 스윕 데이터셋 자동 탐색 → 지표(Jsc/Voc/FF/PCE) + J-V 곡선 축적
@@ -1031,13 +1070,38 @@ def _run_ibc3d(jid, params, log, get_client):
                 log(f"  Jsc = {jsc:.3f} mA/cm² (수집효율 {eta:.1%}, 광학 상한 {jsc_ref:.2f})")
             # (solved 저장은 솔브 직후 위에서 수행 — 평가 오류가 나도 해는 보존됨)
         except Exception as e:
-            log(f"  ✖ 셀 실패 ({type(e).__name__}: {str(e)[:180]}) — 다음 진행")
-            fail_row = {"W_um": w, "gap_um": g, "Jsc_mA_cm2": float("nan"),
-                        "eta_col": float("nan")}
-            if jv_mode == "full_jv":  # 히트맵 키 일치 (실패행 KeyError 방지, 2026-07-09)
-                fail_row.update({"Voc_V": float("nan"), "FF": float("nan"),
-                                 "PCE_pct": float("nan")})
-            rows.append(fail_row)
+            log(f"  ✖ 셀 실패 ({type(e).__name__}: {str(e)[:180]})")
+            # 부분 해 회수 (2026-07-10): 스윕이 도중 발산해도 그 전 전압점들의 해는
+            # 데이터셋에 남아 있음 — 서버 밤샘에서 40분짜리 스윕 14건이 통째로 버려진
+            # 교훈. 저장 + 지표 추출을 시도하고, 안 되면 그때 NaN 기록.
+            recovered = False
+            try:
+                if model is not None:
+                    model.save(str(jd / fname.replace("_unsolved", "_partial")))
+                    if jv_mode == "full_jv":
+                        V, I_A, _e2 = _extract_iv(model, log)
+                        if V.size >= 5:
+                            m, Jgen = _metrics(V, I_A, area_cm2, pin, log)
+                            jsc = m["Jsc_mA_cm2"]
+                            eta = jsc / jsc_ref if jsc == jsc else float("nan")
+                            rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": jsc,
+                                         "eta_col": round(eta, 4), "Voc_V": m["Voc_V"],
+                                         "FF": m["FF"], "PCE_pct": m["PCE_pct"]})
+                            jv_curves.append((f"W{w:g}/g{g:g}*", V, Jgen))
+                            log(f"  ↺ 부분 스윕 회수 성공: {V.size}점 [0..{V.max():.2f}V] — "
+                                f"Jsc {jsc} / Voc {m['Voc_V']} / PCE {m['PCE_pct']}% "
+                                "(* = 발산 전 구간, Voc 도달 여부 확인)")
+                            recovered = True
+            except Exception as e2:
+                log(f"    부분 회수 실패({type(e2).__name__})")
+            if not recovered:
+                log("  — NaN 기록, 다음 진행")
+                fail_row = {"W_um": w, "gap_um": g, "Jsc_mA_cm2": float("nan"),
+                            "eta_col": float("nan")}
+                if jv_mode == "full_jv":  # 히트맵 키 일치 (실패행 KeyError 방지)
+                    fail_row.update({"Voc_V": float("nan"), "FF": float("nan"),
+                                     "PCE_pct": float("nan")})
+                rows.append(fail_row)
         finally:
             try:
                 if model is not None:

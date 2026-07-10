@@ -19,6 +19,8 @@
     {"key": "mesh_hmax_nm", "label": "메시 최대 크기 [nm] (120 권장 — 정량 대역이며 검증됨. ⚠️ 80은 끝단+계면S 3D에서 평형 수렴 실패 확인 2026-07-09)", "type": "number", "default": 120},
     {"key": "nlam", "label": "광학 λ 샘플 수 (15점은 Jsc,opt ~3% 과대 — 31 권장, 광학은 1회만 계산)", "type": "number", "default": 31},
     {"key": "jv_mode", "label": "J-V 범위", "type": "select", "options": ["full_jv", "jsc_only"], "default": "full_jv"},
+    {"key": "v_max", "label": "스윕 상한 [V] (1.3 권장 — Voc~1.05V에 충분. ⚠️ 2V는 강한 순방향 발산으로 스윕 사망 다발, 2026-07-10 확인)", "type": "number", "default": 1.3},
+    {"key": "v_step", "label": "스윕 간격 [V]", "type": "number", "default": 0.05},
     {"key": "gen_mode", "label": "광생성 모델", "type": "select", "options": ["wave_optics", "beer_lambert"], "default": "wave_optics"},
     {"key": "mode", "label": "실행 방식 (local=이 컴퓨터에서 끝까지 솔브)", "type": "select", "options": ["local", "export"], "default": "local"}
   ],

@@ -17,6 +17,8 @@
     {"key": "s_ifc_cms", "label": "계면 재결합 속도 S [cm/s]", "type": "number", "default": 1000},
     {"key": "mesh_hmax_nm", "label": "메시 최대 크기 [nm] (120 권장 — ⚠️ 80은 끝단+계면S 3D에서 평형 수렴 실패 확인 2026-07-09)", "type": "number", "default": 120},
     {"key": "jv_mode", "label": "J-V 범위", "type": "select", "options": ["full_jv", "jsc_only"], "default": "full_jv"},
+    {"key": "v_max", "label": "스윕 상한 [V] (1.3 권장 — 2V는 순방향 발산 다발)", "type": "number", "default": 1.3},
+    {"key": "v_step", "label": "스윕 간격 [V]", "type": "number", "default": 0.05},
     {"key": "gen_mode", "label": "광생성 모델", "type": "select", "options": ["wave_optics", "beer_lambert"], "default": "wave_optics"},
     {"key": "hpc_only", "label": "서버 전용 잠금 (yes=이 PC 솔브 차단)", "type": "select", "options": ["yes"], "default": "yes"},
     {"key": "mode", "label": "실행 방식 (이 케이스는 export만 허용)", "type": "select", "options": ["export"], "default": "export"}
