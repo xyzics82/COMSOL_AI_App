@@ -117,6 +117,15 @@ def run_case(jid, params, log, get_client):
 
 # ---------------- 공통: J-V 추출/지표/플롯 ----------------
 
+def _v_plist(v_max=1.3, step=0.05, knee=0.9):
+    """전압 스윕 명시 목록: 0→knee는 step, knee→v_max는 step/2 (턴온 구간 미세화,
+    2026-07-10 — 발산 지점이 전부 1.0~1.15V 부근이라 그 구간만 촘촘히)."""
+    vals = list(np.arange(0.0, min(knee, v_max) + 1e-9, step))
+    if v_max > knee:
+        vals += list(np.arange(knee + step / 2, v_max + 1e-9, step / 2))
+    return " ".join(f"{v:.4g}" for v in vals)
+
+
 def _sweep_points(model):
     """스윕(V0 배열) 데이터셋의 점 수 — 발산한 셀의 부분 해 존재 여부 판단용 (2026-07-10)."""
     try:
@@ -950,10 +959,11 @@ def _run_ibc3d(jid, params, log, get_client):
                     client, f"ibc3d_{w:g}_{g:g}", mats, w * 1000.0, g * 1000.0, t_abs, taun,
                     lz_um * 1000.0, tip_um * 1000.0, log, g_profile=g_profile,
                     v0_only=(jv_mode != "full_jv"),
-                    # 스윕 상한 기본 1.3V (2026-07-10 서버 밤샘 교훈: 0-2V는 Voc~1.05V를
-                    # 훌쩍 넘긴 강한 순방향에서 뉴턴 발산 — 14/30건이 스윕 중 사망)
-                    vcfg={"start": 0.0, "stop": float(params.get("v_max") or 1.3),
-                          "step": float(params.get("v_step") or 0.05)},
+                    # 스윕 상한 기본 1.3V + 턴온(≥0.9V) 구간 미세 스텝 (2026-07-10:
+                    # 0-2V는 강순방향 발산 / 발산 지점이 전부 1.0~1.15V 부근 → 그 구간
+                    # 스텝을 절반으로 좁혀 뉴턴이 이전 해에서 출발하기 쉽게)
+                    vcfg={"plist": _v_plist(float(params.get("v_max") or 1.3),
+                                            float(params.get("v_step") or 0.05))},
                     s_ifc_cms=float(params.get("s_ifc_cms") or 0),
                     mesh_hmax_nm=(float(params.get("mesh_hmax_nm")) if params.get("mesh_hmax_nm") else None),
                     n_pairs=int(float(params.get("n_pairs") or 0)))
@@ -1005,14 +1015,19 @@ def _run_ibc3d(jid, params, log, get_client):
         try:
             import time as _t
             model = client.load(str(jd / fname))
-            # 솔브 (+평형 발산 시 메시 150nm 완화 1회 재시도 — 2026-07-10 서버 밤샘에서
-            #  Study 1 발산 13/30건 교훈. 스윕 부분 데이터가 남았으면 재솔브 대신 회수 우선)
+            # 솔브 + 메시 사다리 재시도 (2026-07-10 배치 관찰 기반):
+            #   기본(120) → 150 → 100. 150은 평형 발산 2/5 구제, 단 일부(W1/g1)에선
+            #   Swept 파괴 → 100 단계가 받아냄. 스윕 부분 데이터가 남았으면 재솔브 대신
+            #   회수 우선(재솔브는 데이터 소실).
             last_err = None
-            for attempt in (1, 2):
+            for attempt, hm in ((1, None), (2, 150.0), (3, 100.0)):
                 try:
+                    if hm is not None:
+                        model.java.mesh("mesh1").feature("size").set("custom", "on")
+                        model.java.mesh("mesh1").feature("size").set("hmax", f"{hm:g}[nm]")
                     for s in (model / "studies").children():
                         t0 = _t.time()
-                        log(f"  솔브: {s.name()}" + (" (재시도)" if attempt == 2 else ""))
+                        log(f"  솔브: {s.name()}" + (f" (재시도 {hm:g}nm)" if hm else ""))
                         model.solve(s.name())
                         log(f"    완료 {_t.time()-t0:.1f}s")
                     last_err = None
@@ -1022,13 +1037,8 @@ def _run_ibc3d(jid, params, log, get_client):
                     if jv_mode == "full_jv" and _sweep_points(model) >= 5:
                         log("  (스윕 부분 데이터 감지 — 재솔브 대신 부분 회수로 전환)")
                         break
-                    if attempt == 1:
-                        try:
-                            model.java.mesh("mesh1").feature("size").set("custom", "on")
-                            model.java.mesh("mesh1").feature("size").set("hmax", "150[nm]")
-                            log(f"  ✖ 솔브 실패({str(e_s)[:90]}) → 메시 150nm 완화 후 재시도")
-                        except Exception:
-                            break
+                    if attempt < 3:
+                        log(f"  ✖ 솔브 실패({str(e_s)[:90]}) → 메시 사다리 다음 단계")
             if last_err is not None:
                 raise last_err
             model.save(str(jd / fname.replace("_unsolved", "_solved")))  # 솔브 성공 즉시 보존
@@ -1077,9 +1087,18 @@ def _run_ibc3d(jid, params, log, get_client):
             recovered = False
             try:
                 if model is not None:
-                    model.save(str(jd / fname.replace("_unsolved", "_partial")))
+                    pfile = jd / fname.replace("_unsolved", "_partial")
+                    model.save(str(pfile))
                     if jv_mode == "full_jv":
-                        V, I_A, _e2 = _extract_iv(model, log)
+                        try:
+                            V, I_A, _e2 = _extract_iv(model, log)
+                        except Exception as e_ev:
+                            # 발산 직후 모델이 평가를 거부하는 경우(FlException, 2026-07-10
+                            # 오전 관찰) — 저장본을 새로 로드하면 평가 가능
+                            log(f"    직접 평가 거부({type(e_ev).__name__}) → 저장본 재로드 후 재시도")
+                            client.remove(model)
+                            model = client.load(str(pfile))
+                            V, I_A, _e2 = _extract_iv(model, log)
                         if V.size >= 5:
                             m, Jgen = _metrics(V, I_A, area_cm2, pin, log)
                             jsc = m["Jsc_mA_cm2"]

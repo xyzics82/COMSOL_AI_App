@@ -227,7 +227,11 @@ def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, lz_nm, ztip_nm, log,
         log("  스터디: Jsc 전용 (V0=0 단일점) — 3D v0 권장 모드")
     else:
         v = vcfg or {"start": 0.0, "stop": 2.0, "step": 0.05}
-        stat.set("plistarr", [f"range({v['start']},{v['step']},{v['stop']})"])
+        if v.get("plist"):  # 명시 목록 (턴온 구간 미세 스텝, 2026-07-10)
+            stat.set("plistarr", [v["plist"]])
+            log(f"  스터디: 풀 J-V 명시 스윕 ({len(v['plist'].split())}점)")
+        else:
+            stat.set("plistarr", [f"range({v['start']},{v['step']},{v['stop']})"])
     stat.set("punit", ["V"])
     _try_set(stat, [("sweeptype", "sparse")], log, "stat")
     _try_set(stat, [("pcontinuation", "V0")], log, "stat")
@@ -446,7 +450,11 @@ def _build_array(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, lz_nm, ztip_n
         log("  스터디: Jsc 전용 (V0=0 단일점)")
     else:
         v = vcfg or {"start": 0.0, "stop": 2.0, "step": 0.05}
-        stat.set("plistarr", [f"range({v['start']},{v['step']},{v['stop']})"])
+        if v.get("plist"):
+            stat.set("plistarr", [v["plist"]])
+            log(f"  스터디: 풀 J-V 명시 스윕 ({len(v['plist'].split())}점)")
+        else:
+            stat.set("plistarr", [f"range({v['start']},{v['step']},{v['stop']})"])
     stat.set("punit", ["V"])
     _try_set(stat, [("sweeptype", "sparse")], log, "stat")
     _try_set(stat, [("pcontinuation", "V0")], log, "stat")
