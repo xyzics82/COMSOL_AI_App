@@ -1015,16 +1015,25 @@ def _run_ibc3d(jid, params, log, get_client):
         try:
             import time as _t
             model = client.load(str(jd / fname))
-            # 솔브 + 메시 사다리 재시도 (2026-07-10 배치 관찰 기반):
-            #   기본(120) → 150 → 100. 150은 평형 발산 2/5 구제, 단 일부(W1/g1)에선
-            #   Swept 파괴 → 100 단계가 받아냄. 스윕 부분 데이터가 남았으면 재솔브 대신
-            #   회수 우선(재솔브는 데이터 소실).
+            # 솔브 + 메시 사다리 재시도 (2026-07-10 배치 검증: 150nm 4건 + 100nm 5건
+            # 구제 = 실패의 주 원인이 메시-뉴턴 상성임을 확인. 잔여 실패 대응으로
+            # 135/90 단계 추가, 마지막 단계는 스윕 전체 미세 스텝(0.025V 균일).
+            # 스윕 부분 데이터(≥5점)가 남았으면 재솔브 대신 회수 우선 — 재솔브는 소실)
             last_err = None
-            for attempt, hm in ((1, None), (2, 150.0), (3, 100.0)):
+            _vmx = float(params.get("v_max") or 1.3)
+            _vst = float(params.get("v_step") or 0.05)
+            ladder = ((1, None, False), (2, 150.0, False), (3, 100.0, False),
+                      (4, 135.0, False), (5, 90.0, True))
+            for attempt, hm, fine in ladder:
                 try:
                     if hm is not None:
                         model.java.mesh("mesh1").feature("size").set("custom", "on")
                         model.java.mesh("mesh1").feature("size").set("hmax", f"{hm:g}[nm]")
+                    if fine and jv_mode == "full_jv":
+                        # 최후 단계: 스윕 전체 미세화 (0→v_max 균일 step/2 — 시간 ~2배)
+                        model.java.study("std2").feature("stat").set(
+                            "plistarr", [_v_plist(_vmx, _vst / 2, knee=_vmx)])
+                        log("    (최후 단계: 스윕 전체 미세 스텝)")
                     for s in (model / "studies").children():
                         t0 = _t.time()
                         log(f"  솔브: {s.name()}" + (f" (재시도 {hm:g}nm)" if hm else ""))
@@ -1037,7 +1046,7 @@ def _run_ibc3d(jid, params, log, get_client):
                     if jv_mode == "full_jv" and _sweep_points(model) >= 5:
                         log("  (스윕 부분 데이터 감지 — 재솔브 대신 부분 회수로 전환)")
                         break
-                    if attempt < 3:
+                    if attempt < len(ladder):
                         log(f"  ✖ 솔브 실패({str(e_s)[:90]}) → 메시 사다리 다음 단계")
             if last_err is not None:
                 raise last_err
