@@ -21,7 +21,7 @@
     {"key": "v_step", "label": "스윕 간격 [V]", "type": "number", "default": 0.05},
     {"key": "gen_mode", "label": "광생성 모델", "type": "select", "options": ["wave_optics", "beer_lambert"], "default": "wave_optics"},
     {"key": "hpc_only", "label": "서버 전용 잠금 (yes=이 PC 솔브 차단)", "type": "select", "options": ["yes"], "default": "yes"},
-    {"key": "mode", "label": "실행 방식 (이 케이스는 export만 허용)", "type": "select", "options": ["export"], "default": "export"}
+    {"key": "mode", "label": "실행 방식 (export=반출 / review=모델만 만들고 검토 대기 — 솔브는 서버에서)", "type": "select", "options": ["export", "review"], "default": "export"}
   ],
   "data_requirements": ["am15", "mapbi3_nk"]
 }

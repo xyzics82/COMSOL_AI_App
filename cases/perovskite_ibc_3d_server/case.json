@@ -22,7 +22,7 @@
     {"key": "v_max", "label": "스윕 상한 [V] (1.3 권장 — Voc~1.05V에 충분. ⚠️ 2V는 강한 순방향 발산으로 스윕 사망 다발, 2026-07-10 확인)", "type": "number", "default": 1.3},
     {"key": "v_step", "label": "스윕 간격 [V]", "type": "number", "default": 0.05},
     {"key": "gen_mode", "label": "광생성 모델", "type": "select", "options": ["wave_optics", "beer_lambert"], "default": "wave_optics"},
-    {"key": "mode", "label": "실행 방식 (local=이 컴퓨터에서 끝까지 솔브)", "type": "select", "options": ["local", "export"], "default": "local"}
+    {"key": "mode", "label": "실행 방식 (local=끝까지 솔브 / review=모델만 만들고 검토 대기 → ④에서 [해 구하기] / export=반출)", "type": "select", "options": ["local", "review", "export"], "default": "local"}
   ],
   "data_requirements": ["am15", "mapbi3_nk"]
 }

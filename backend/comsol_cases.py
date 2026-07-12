@@ -117,13 +117,54 @@ def run_case(jid, params, log, get_client):
 
 # ---------------- 공통: J-V 추출/지표/플롯 ----------------
 
-def _v_plist(v_max=1.3, step=0.05, knee=0.9):
-    """전압 스윕 명시 목록: 0→knee는 step, knee→v_max는 step/2 (턴온 구간 미세화,
+def _v_vals(v_max=1.3, step=0.05, knee=0.9):
+    """전압 스윕 값 목록(float): 0→knee는 step, knee→v_max는 step/2 (턴온 구간 미세화,
     2026-07-10 — 발산 지점이 전부 1.0~1.15V 부근이라 그 구간만 촘촘히)."""
     vals = list(np.arange(0.0, min(knee, v_max) + 1e-9, step))
     if v_max > knee:
         vals += list(np.arange(knee + step / 2, v_max + 1e-9, step / 2))
-    return " ".join(f"{v:.4g}" for v in vals)
+    return vals
+
+
+def _v_plist(v_max=1.3, step=0.05, knee=0.9):
+    """_v_vals를 COMSOL plistarr 문자열로."""
+    return " ".join(f"{v:.4g}" for v in _v_vals(v_max, step, knee))
+
+
+def _diagnose_fail(label, hist, recovered, last_v=None):
+    """실패 셀 진단문 — '조건만 조금 다른데 왜 실패했나'를 시도 이력 기반으로 설명.
+
+    hist 항목: (hmax(None=기본), stage, 스윕점수, 도달V, 오류요지)
+    stage: mesh(메시 생성 실패) / eq(평형 발산) / sweep(스윕 도중 발산) / 성공
+    """
+    lines = [f"■ {label} — 시도 {len(hist)}회 이력:"]
+    for n, (hm, stage, pts, lv, err) in enumerate(hist, 1):
+        mesh = f"{hm:g}nm" if hm else "기본(요청값)"
+        if stage == "성공":
+            lines.append(f"  {n}) 메시 {mesh}: 솔브 성공")
+            continue
+        what = {"mesh": "메시 생성 자체가 실패 — 이 치수 조합과 이 hmax의 상성 문제"
+                        "(Swept 분할이 만들어지지 않음)",
+                "eq": "평형(Study 1)에서 뉴턴 발산 — 초기해 품질이 요소 배열에 민감",
+                "sweep": f"스윕(Study 2)이 V≈{lv:.2f}V({pts}점 확보)에서 발산"}.get(stage, stage)
+        lines.append(f"  {n}) 메시 {mesh}: {what}" + (f" [{err}]" if err else ""))
+    lines.append(
+        "  해석: W/gap을 바꾸면 물리 조건뿐 아니라 지오메트리 치수가 바뀌어 메시 생성기가"
+        " 만드는 요소 개수·종횡비가 '불연속적으로' 달라집니다. 반도체 뉴턴 솔버는 고주입"
+        " 순방향에서 요소 품질에 극도로 민감해, 같은 물리인데 특정 치수만 발산하는 것은"
+        " 메시-뉴턴 상성 문제입니다 (2026-07-10 배치: 메시 사다리로 9건 구제 실증)."
+        " 스윕 발산은 대부분 Voc(≈1.05V) 이후 전류가 지수적으로 커지는 강순방향 구간에서"
+        " 일어나며, Voc를 넘긴 부분 데이터는 지표로 유효합니다.")
+    if hist and hist[-1][1] == "성공":
+        lines.append(f"  결말: 메시 사다리 {len(hist)}번째 시도에서 솔브 성공 — 지표는 정상값. "
+                     "(앞선 실패는 결과 신뢰도와 무관, 메시 상성 문제였음)")
+    elif recovered:
+        vtxt = f"~{last_v:.2f}V" if last_v is not None else "Voc 이후"
+        lines.append(f"  조치: 부분 스윕({vtxt}) 회수로 지표 확보 — J-V 곡선의 '*' 라벨이 이 셀입니다.")
+    else:
+        lines.append("  조치: 메시 사다리 전 단계 소진 — 인접 치수(예: ±0.1um)로 대체하거나"
+                     " 이 조합만 v_step을 절반으로 줄여 재실행을 권합니다.")
+    return "\n".join(lines)
 
 
 def _sweep_points(model):
@@ -901,8 +942,136 @@ def _run_ibc(jid, params, log, get_client):
         raise jobs.Cancelled()
 
 
+def _review_svg(w_um, gap_um, t_abs_nm, lz_um, tip_um, has_idl, t_sno2, t_niox):
+    """모델 개략도 SVG (검토 모드) — 실제 입력 치수 기반, 세로 비율은 과장(표기).
+
+    좌: 단면(x–y, 층 구조·접점·IDL) / 우: 평면(x–z, 핑거 끝단). 임의값 없음 —
+    모든 라벨 수치는 빌더에 실제로 들어간 값.
+    """
+    L = w_um + gap_um            # 단위셀 폭 (양끝 반폭 핑거)
+    sx = 260.0 / L               # x 스케일 [px/um]
+    hw = w_um / 2 * sx
+    x0, y0 = 40, 30              # 단면 패널 원점
+    # 세로(두께)는 비율 과장: CTL 26px, IDL 6px, 흡수층 120px
+    hC, hI, hA = 26, (6 if has_idl else 0), 120
+    yA, yI, yC = y0 + 20, y0 + 20 + hA, y0 + 20 + hA + hI
+    def r(x, y, w, h, fill, op="1"):
+        return (f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" '
+                f'fill="{fill}" fill-opacity="{op}" stroke="#333" stroke-width="0.6"/>')
+    def t(x, y, s, size=10, anchor="start", fill="#111"):
+        return (f'<text x="{x:.1f}" y="{y:.1f}" font-size="{size}" '
+                f'text-anchor="{anchor}" fill="{fill}" font-family="sans-serif">{s}</text>')
+    p = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 260" '
+         f'font-family="sans-serif">',
+         t(x0, y0 - 10, f"단면 (x–y)  W={w_um:g}um, gap={gap_um:g}um — 세로 비율 과장", 11),
+         r(x0, yA, L * sx, hA, "#f8d5a3"),                      # 흡수층
+         t(x0 + L * sx / 2, yA + hA / 2, f"MAPbI3 {t_abs_nm:g}nm (G(z) 주입)", 11, "middle")]
+    if has_idl:  # IDL 밴드 (n/p 각 핑거 위)
+        p += [r(x0, yI, hw, hI, "#e05c5c"), r(x0 + L * sx - hw, yI, hw, hI, "#e05c5c"),
+              t(x0 + L * sx / 2, yI + hI - 1, "IDL 2nm (계면 재결합 등가층)", 9, "middle", "#a00")]
+    p += [r(x0, yC, hw, hC, "#9ecbf5"), t(x0 + hw / 2, yC + hC / 2 + 4,
+                                          f"SnO2 {t_sno2:g}nm", 9, "middle"),
+          r(x0 + L * sx - hw, yC, hw, hC, "#b7e3b1"),
+          t(x0 + L * sx - hw / 2, yC + hC / 2 + 4, f"NiOx {t_niox:g}nm", 9, "middle"),
+          # 접점 (CTL 바닥면)
+          r(x0, yC + hC, hw, 5, "#555"), r(x0 + L * sx - hw, yC + hC, hw, 5, "#555"),
+          t(x0 + hw / 2, yC + hC + 16, "n 접점", 9, "middle"),
+          t(x0 + L * sx - hw / 2, yC + hC + 16, "p 접점 (V0 스윕)", 9, "middle"),
+          t(x0 + L * sx / 2, yC + hC / 2 + 4, f"gap {gap_um:g}um", 9, "middle", "#666")]
+    # 우측: 평면 (x–z) — 핑거 끝단
+    X0, Y0 = 400, 50
+    sz = 150.0 / lz_um
+    ztip = tip_um * sz
+    p += [t(X0, Y0 - 10, f"평면 (x–z)  핑거 {tip_um:g}um / 셀 {lz_um:g}um", 11),
+          r(X0, Y0, L * sx * 0.9, lz_um * sz, "#f8d5a3", "0.5"),
+          r(X0, Y0, hw * 0.9, ztip, "#9ecbf5", "0.9"),
+          r(X0 + (L * sx - hw) * 0.9, Y0, hw * 0.9, ztip, "#b7e3b1", "0.9")]
+    if tip_um < lz_um:
+        p += [f'<line x1="{X0}" y1="{Y0 + ztip:.1f}" x2="{X0 + L * sx * 0.9:.1f}" '
+              f'y2="{Y0 + ztip:.1f}" stroke="#c00" stroke-dasharray="4 3"/>',
+              t(X0 + L * sx * 0.9 + 4, Y0 + ztip + 3, "핑거 끝단(팁)", 9, "start", "#c00")]
+    p.append("</svg>")
+    return "\n".join(p)
+
+
+def _write_model_review(jid, params, files, combos, mats, g_profile,
+                        t_abs, lz_um, tip_um, taun, jv_mode, log):
+    """검토 모드 산출물: model_review.md(모폴로지·경계조건·물성·메시·스터디) + 개략도 SVG.
+
+    모든 수치는 빌더에 실제로 넣은 값에서 가져온다(임의값 금지). 한계(정직 고지):
+    실제 생성된 메시의 요소 수·품질 통계는 COMSOL API 검증이 필요해 아직 자동화하지
+    않았다 — unsolved .mph를 GUI로 열어 Mesh 노드에서 확인 가능(서버 검증 후 추가 예정).
+    """
+    from . import ibc3d_builder as _b
+    jd = jobs.job_dir(jid)
+    s_ifc = float(params.get("s_ifc_cms") or 0)
+    has_idl = s_ifc > 0
+    hmax = params.get("mesh_hmax_nm") or "빌더 기본"
+    n_pairs = int(float(params.get("n_pairs") or 0))
+    vmx = float(params.get("v_max") or 1.3)
+    vst = float(params.get("v_step") or 0.05)
+    import json as _json
+    md = ["# 모델 검토서 (솔브 전 확인용)", "",
+          f"- 케이스: `{params.get('case_id', '')}` / 빌드 성공 {len(files)}/{len(combos)}조합",
+          f"- 구조: IBC 3D {'주기 단위셀(양끝 반폭 핑거)' if n_pairs == 0 else f'깍지 배열 {n_pairs}쌍'}"
+          f" — 흡수층 MAPbI3 {t_abs:g}nm / 핑거 {tip_um:g}um (셀 z {lz_um:g}um"
+          + (", 끝단 효과 포함)" if tip_um < lz_um else " = 압출 극한)"), "",
+          "## 1. 모폴로지 (지오메트리)", "",
+          "| 조합 | W [um] | gap [um] | unsolved 파일 | 접점 면적 [cm²] |",
+          "|---|---|---|---|---|"]
+    for (w, g) in combos:
+        if (w, g) in files:
+            fn, a = files[(w, g)]
+            md.append(f"| W{w:g}/g{g:g} | {w:g} | {g:g} | {fn} | {a:.3e} |")
+    md += ["",
+           f"- 층 구성(아래→위): 접점(금속) / n측 SnO₂ {_b.T_SNO2:g}nm · p측 NiOx "
+           f"{_b.T_NIOX:g}nm 핑거"
+           + (f" / IDL {_b.T_IDL:g}nm(계면 재결합 등가층)" if has_idl else "")
+           + f" / MAPbI₃ 흡수층 {t_abs:g}nm", "",
+           "## 2. 경계조건·물리", "",
+           f"- 접점: 금속 접점 2개 — n측(SnO₂ 바닥면 핑거 구간)·p측(NiOx 바닥면 핑거 구간), "
+           f"{'풀 J-V: V0를 0→' + f'{vmx:g}V 스윕' if jv_mode == 'full_jv' else 'Jsc 전용(V=0)'}",
+           f"- 벌크 재결합: SRH τ = {taun}",
+           (f"- 계면 재결합: IDL {_b.T_IDL:g}nm 등가층, S = {s_ifc:g} cm/s → "
+            f"τ_IDL = d/S = {(_b.T_IDL * 1e-9) / (s_ifc * 1e-2):.3g}s (벌크 SRH와 가산)"
+            if has_idl else "- 계면 재결합: 없음 (s_ifc_cms=0)"),
+           ("- 광생성: 평판 파동광학 G(z) 주입"
+            + (f", Jsc,opt = {g_profile['jsc_wave']:.2f} mA/cm²" if g_profile else "")
+            if str(params.get('gen_mode', 'wave_optics')) == "wave_optics"
+            else "- 광생성: Beer-Lambert"), "",
+           "## 3. 물성 (materials.json 값 그대로)", "", "```json",
+           _json.dumps({k: v for k, v in mats.items()}, ensure_ascii=False, indent=1),
+           "```", "",
+           "## 4. 메시", "",
+           f"- 방식: Swept (3D 평판 검증에서 확정) / hmax = {hmax}nm",
+           "- IDL 사용 시: IDL 밴드 z-전구간 분할(끝단×IDL Swept 파괴 해결, 2026-07-09)",
+           "- ⚠️ 실제 생성된 요소 수·품질 통계는 아직 자동 추출하지 않음(COMSOL API 검증"
+           " 필요) — unsolved .mph를 GUI로 열어 Mesh 노드에서 확인하세요.",
+           "- 솔브 시 자동 메시 사다리: 요청값 → 150 → 100 → 135 → 90nm(+스윕 전체 미세"
+           " 스텝) 순으로 발산 시 재시도합니다.", "",
+           "## 5. 스터디", "",
+           "- Study 1: 평형(초기해)",
+           (f"- Study 2: J-V 명시 스윕 0→{vmx:g}V — 0→0.9V는 {vst:g}V 간격, "
+            f"0.9→{vmx:g}V는 {vst / 2:g}V 간격(턴온 구간 미세화)"
+            if jv_mode == "full_jv" else "- Study 2: 없음 (Jsc 전용)"), "",
+           "## 6. 다음 단계", "",
+           "- 모델 확정: ④ 작업 상세의 [✅ 검토 완료 — 해 구하기] 버튼 → 이 빌드 그대로 솔브",
+           "- 수정 필요: [🛠 수정 프롬프트]에 요청 입력 → 복붙 모드로 수정 케이스 생성 후"
+           " 다시 검토", ""]
+    (jd / "model_review.md").write_text("\n".join(md), encoding="utf-8")
+    try:
+        w0, g0 = next(iter(k for k in combos if k in files))
+        (jd / "model_schematic.svg").write_text(
+            _review_svg(w0, g0, t_abs, lz_um, tip_um, has_idl, _b.T_SNO2, _b.T_NIOX),
+            encoding="utf-8")
+    except Exception as e:
+        log(f"⚠️ 개략도 생성 실패: {type(e).__name__}: {e}")
+    log("모델 검토서 저장: model_review.md + model_schematic.svg")
+
+
 def _run_ibc3d(jid, params, log, get_client):
     """IBC 3D 단위 셀 (v4): W×gap 그리드, 핑거 길이·팁 파라미터, Jsc 전용.
+    (아래 본체 — 검토서 함수는 바로 위 _write_model_review 참조)
 
     검증 기준: tip_len=finger_len(완전 압출)이면 **같은 메시 설정의** 2D IBC와 Jsc가
     ~2% 내 일치해야 함 (기본 메시끼리 W3/g3 wave: 3D 14.87 vs 2D 14.55, 2026-07-08).
@@ -924,7 +1093,8 @@ def _run_ibc3d(jid, params, log, get_client):
     mode = params.get("mode", "local")
     gen_mode = str(params.get("gen_mode", "wave_optics"))
     jv_mode = str(params.get("jv_mode", "jsc_only"))
-    if str(params.get("hpc_only", "")).lower() in ("yes", "true", "1") and mode != "export":
+    if (str(params.get("hpc_only", "")).lower() in ("yes", "true", "1")
+            and mode not in ("export", "review")):  # review=빌드+검토서만 (솔브 없음)
         raise RuntimeError(
             "이 케이스는 서버 컴퓨터 전용(HPC)입니다 — 이 PC에서 local 솔브를 막았습니다. "
             "mode=export로 unsolved+run_server.bat을 만들어 서버에서 돌리세요. "
@@ -939,16 +1109,40 @@ def _run_ibc3d(jid, params, log, get_client):
         "sno2_nd": "1e19[1/cm^3]",
         "niox_na": "1e18[1/cm^3]",
     }
+    resume_from = str(params.get("resume_from") or "").strip()
     g_profile = None
-    if gen_mode == "wave_optics":
+    if gen_mode == "wave_optics" and not resume_from:
         from . import wo_optics
         g_profile = wo_optics.compute_G_profile(client, t_abs, log,
                                                 nlam=int(float(params.get("nlam") or 15)))
     jd = jobs.job_dir(jid)
     combos = [(w, g) for g in gs for w in ws]
     files = {}
-    log(f"\n[1단계] unsolved 모델 {len(combos)}개 생성")
-    for i, (w, g) in enumerate(combos, 1):
+    jsc_ref_resume = None
+    if resume_from:
+        # (2026-07-13) 모델 검토 워크플로: review 작업의 unsolved 빌드를 복사해 와서
+        # 1단계(광학·모델 생성)를 통째로 생략하고 솔브만 수행
+        import json as _json
+        import shutil
+        src = jobs.job_dir(resume_from)
+        mf = src / "build_manifest.json"
+        if not mf.exists():
+            raise RuntimeError(f"재개할 빌드 매니페스트가 없습니다 (원본 작업 {resume_from})")
+        man = _json.loads(mf.read_text(encoding="utf-8"))
+        for c in man.get("combos", []):
+            key = (float(c["w"]), float(c["g"]))
+            if key in combos and (src / c["fname"]).exists():
+                shutil.copy2(src / c["fname"], jd / c["fname"])
+                files[key] = (c["fname"], float(c["area_cm2"]))
+        jsc_ref_resume = man.get("jsc_wave")
+        log(f"[재개] 작업 {resume_from}의 검토 완료 빌드 재사용 — "
+            f"{len(files)}/{len(combos)}조합 복사, 1단계(광학·생성) 생략")
+        if not files:
+            raise RuntimeError("재개할 unsolved 모델이 없습니다 — 원본 작업 그리드와 일치 확인")
+    else:
+        log(f"\n[1단계] unsolved 모델 {len(combos)}개 생성")
+    build_list = [] if resume_from else combos
+    for i, (w, g) in enumerate(build_list, 1):
         jobs.check_cancel(jid)
         # 조합별 보호 + 1회 재시도 (2026-07-09 서버: 45번째 생성에서 COMSOL 세션 NPE로
         # 배치 전체가 죽음 — 장시간 생성 반복 후 세션 일시 불안정 대비)
@@ -988,16 +1182,40 @@ def _run_ibc3d(jid, params, log, get_client):
     if not files:
         raise RuntimeError("모든 조합의 모델 생성이 실패했습니다 — 로그 회신 요청")
     _write_server_script(jid, [files[c][0] for c in combos if c in files], log)
+    if not resume_from:
+        # 빌드 매니페스트 — 검토(review) 후 [해 구하기]로 재개할 때 1단계 생략용
+        import json as _json
+        (jd / "build_manifest.json").write_text(_json.dumps({
+            "combos": [{"w": w, "g": g, "fname": files[(w, g)][0],
+                        "area_cm2": files[(w, g)][1]}
+                       for (w, g) in combos if (w, g) in files],
+            "jsc_wave": (g_profile or {}).get("jsc_wave"),
+            "params": {k: str(v) for k, v in (params or {}).items()},
+        }, ensure_ascii=False, indent=1), encoding="utf-8")
     if mode == "export":
         log("반출용 생성 완료")
+        return
+    if mode == "review":
+        # (2026-07-13) 검토 모드: 솔브 없이 모델 검토서+개략도 생성 후 대기
+        try:
+            _write_model_review(jid, params, files, combos, mats, g_profile,
+                                t_abs, lz_um, tip_um, taun, jv_mode, log)
+        except Exception as e:
+            log(f"⚠️ 검토서 생성 실패: {type(e).__name__}: {e}")
+        log("\n[검토 대기] unsolved 모델 + 모델 검토서 생성 완료.\n"
+            "④ 작업 상세에서 model_review.md(모폴로지·경계조건·물성·메시)와 개략도를 확인하세요.\n"
+            "- 모델이 마음에 들면: [✅ 검토 완료 — 해 구하기] 버튼 → 이 빌드 그대로 솔브 시작\n"
+            "- 수정이 필요하면: [🛠 수정 프롬프트]에 요청을 쓰고 복붙 모드로 수정된 케이스 생성")
         return
 
     log(f"\n[2단계] 순차 솔브 ({len(combos)}건, 셀당 수 분~수십 분 — 촘촘한 메시·풀 J-V일수록 길어짐)")
     rows = []
+    fail_notes = []  # 셀별 실패 진단문 (fail_diagnosis.txt — ④ 작업 상세에 표시)
     jv_curves = []  # full_jv일 때 조합별 J-V 곡선 (jv.png + 재플롯 CSV)
     pin = _pin_mw_cm2(log)
     cancelled = False
-    jsc_ref = g_profile["jsc_wave"] if g_profile else 26.261
+    jsc_ref = (g_profile["jsc_wave"] if g_profile
+               else jsc_ref_resume if jsc_ref_resume else 26.261)
     for i, (w, g) in enumerate(combos, 1):
         if jobs.cancel_requested(jid):
             log(f"\n[중단 요청] 남은 {len(combos)-i+1}건 건너뜀")
@@ -1005,26 +1223,33 @@ def _run_ibc3d(jid, params, log, get_client):
             break
         if (w, g) not in files:  # 1단계 빌드 실패 조합 — NaN 행으로 기록하고 스킵
             rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": float("nan"),
-                         "eta_col": float("nan"),
+                         "eta_col": float("nan"), "note": "빌드 실패",
                          **({"Voc_V": float("nan"), "FF": float("nan"),
                              "PCE_pct": float("nan")} if jv_mode == "full_jv" else {})})
             continue
         fname, area_cm2 = files[(w, g)]
         log(f"\n===== [{i}/{len(combos)}] W={w:g}um, gap={g:g}um =====")
         model = None
+        pfile = jd / fname.replace("_unsolved", "_partial")
+        _hist, _best_pts, _last_v = [], 0, None  # 진단 이력 / 보존된 최다 부분점수 / 도달 V
         try:
             import time as _t
             model = client.load(str(jd / fname))
             # 솔브 + 메시 사다리 재시도 (2026-07-10 배치 검증: 150nm 4건 + 100nm 5건
             # 구제 = 실패의 주 원인이 메시-뉴턴 상성임을 확인. 잔여 실패 대응으로
             # 135/90 단계 추가, 마지막 단계는 스윕 전체 미세 스텝(0.025V 균일).
-            # 스윕 부분 데이터(≥5점)가 남았으면 재솔브 대신 회수 우선 — 재솔브는 소실)
+            # 부분 데이터 수락 기준 (2026-07-13): Voc(≈1.05V)를 넘긴 부분 스윕만 최종
+            # 결과로 인정 — 5점[0.17V]짜리 부분 회수가 사다리를 끊고 Voc 없는 NaN 행이
+            # 되던 W3/g3 사례 수정. Voc 미달 부분 해는 *_partial로 보존만 하고 사다리 계속.
             last_err = None
             _vmx = float(params.get("v_max") or 1.3)
             _vst = float(params.get("v_step") or 0.05)
+            _v_ok = min(1.1, _vmx)               # 부분 수락 하한 (Voc 위)
+            _vlist = _v_vals(_vmx, _vst)         # 현재 스윕 전압 목록 (도달 V 계산용)
             ladder = ((1, None, False), (2, 150.0, False), (3, 100.0, False),
                       (4, 135.0, False), (5, 90.0, True))
             for attempt, hm, fine in ladder:
+                cur_study = ""
                 try:
                     if hm is not None:
                         model.java.mesh("mesh1").feature("size").set("custom", "on")
@@ -1033,23 +1258,39 @@ def _run_ibc3d(jid, params, log, get_client):
                         # 최후 단계: 스윕 전체 미세화 (0→v_max 균일 step/2 — 시간 ~2배)
                         model.java.study("std2").feature("stat").set(
                             "plistarr", [_v_plist(_vmx, _vst / 2, knee=_vmx)])
+                        _vlist = _v_vals(_vmx, _vst / 2, knee=_vmx)
                         log("    (최후 단계: 스윕 전체 미세 스텝)")
                     for s in (model / "studies").children():
+                        cur_study = s.name()
                         t0 = _t.time()
                         log(f"  솔브: {s.name()}" + (f" (재시도 {hm:g}nm)" if hm else ""))
                         model.solve(s.name())
                         log(f"    완료 {_t.time()-t0:.1f}s")
                     last_err = None
+                    _hist.append((hm, "성공", None, None, None))
                     break
                 except Exception as e_s:
                     last_err = e_s
-                    if jv_mode == "full_jv" and _sweep_points(model) >= 5:
-                        log("  (스윕 부분 데이터 감지 — 재솔브 대신 부분 회수로 전환)")
+                    err1 = " ".join(str(e_s).split())[:110]
+                    pts = _sweep_points(model) if jv_mode == "full_jv" else 0
+                    lv = _vlist[pts - 1] if 0 < pts <= len(_vlist) else 0.0
+                    stage = ("mesh" if "building mesh" in str(e_s)
+                             else "sweep" if (pts >= 5 or "2" in cur_study) else "eq")
+                    _hist.append((hm, stage, pts, lv, err1))
+                    if pts >= 5 and lv >= _v_ok:
+                        _last_v = lv
+                        log(f"  (부분 스윕 {pts}점[~{lv:.2f}V] — Voc 이후 도달 → 부분 회수로 전환)")
                         break
+                    if pts > _best_pts:  # Voc 미달 부분 해 — 보존만 하고 사다리 계속
+                        _best_pts = pts
+                        model.save(str(pfile))
+                        log(f"  (부분 해 {pts}점[~{lv:.2f}V] 보존 — Voc 미달이라 사다리 계속)")
                     if attempt < len(ladder):
-                        log(f"  ✖ 솔브 실패({str(e_s)[:90]}) → 메시 사다리 다음 단계")
+                        log(f"  ✖ 솔브 실패({err1[:90]}) → 메시 사다리 다음 단계")
             if last_err is not None:
                 raise last_err
+            if len(_hist) > 1:  # 재시도 끝 성공 — '왜 재시도가 필요했나'도 진단서에 기록
+                fail_notes.append(_diagnose_fail(f"W{w:g}/g{g:g} (최종 성공)", _hist, False))
             model.save(str(jd / fname.replace("_unsolved", "_solved")))  # 솔브 성공 즉시 보존
             if jv_mode == "full_jv":
                 # 풀 J-V: 스윕 데이터셋 자동 탐색 → 지표(Jsc/Voc/FF/PCE) + J-V 곡선 축적
@@ -1059,7 +1300,7 @@ def _run_ibc3d(jid, params, log, get_client):
                 eta = jsc / jsc_ref if jsc == jsc else float("nan")
                 rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": jsc,
                              "eta_col": round(eta, 4), "Voc_V": m["Voc_V"],
-                             "FF": m["FF"], "PCE_pct": m["PCE_pct"]})
+                             "FF": m["FF"], "PCE_pct": m["PCE_pct"], "note": ""})
                 jv_curves.append((f"W{w:g}/g{g:g}", V, Jgen))
                 log(f"  W{w:g}/g{g:g}: Jsc {jsc} / Voc {m['Voc_V']} / FF {m['FF']} / "
                     f"PCE {m['PCE_pct']}% (수집효율 {eta:.1%})")
@@ -1085,7 +1326,7 @@ def _run_ibc3d(jid, params, log, get_client):
                 jsc = abs(I) * 1000.0 / area_cm2
                 eta = jsc / jsc_ref
                 rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": round(jsc, 3),
-                             "eta_col": round(eta, 4)})
+                             "eta_col": round(eta, 4), "note": ""})
                 log(f"  Jsc = {jsc:.3f} mA/cm² (수집효율 {eta:.1%}, 광학 상한 {jsc_ref:.2f})")
             # (solved 저장은 솔브 직후 위에서 수행 — 평가 오류가 나도 해는 보존됨)
         except Exception as e:
@@ -1096,8 +1337,14 @@ def _run_ibc3d(jid, params, log, get_client):
             recovered = False
             try:
                 if model is not None:
-                    pfile = jd / fname.replace("_unsolved", "_partial")
-                    model.save(str(pfile))
+                    cur_pts = _sweep_points(model) if jv_mode == "full_jv" else 0
+                    if cur_pts >= _best_pts or not pfile.exists():
+                        model.save(str(pfile))
+                    else:
+                        # 사다리 도중 보존한 부분 해가 현재(마지막 단계)보다 김 → 그걸로 회수
+                        log(f"    (현재 해 {cur_pts}점 < 보존본 {_best_pts}점 → 보존본으로 회수)")
+                        client.remove(model)
+                        model = client.load(str(pfile))
                     if jv_mode == "full_jv":
                         try:
                             V, I_A, _e2 = _extract_iv(model, log)
@@ -1112,9 +1359,11 @@ def _run_ibc3d(jid, params, log, get_client):
                             m, Jgen = _metrics(V, I_A, area_cm2, pin, log)
                             jsc = m["Jsc_mA_cm2"]
                             eta = jsc / jsc_ref if jsc == jsc else float("nan")
+                            _last_v = float(V.max())
                             rows.append({"W_um": w, "gap_um": g, "Jsc_mA_cm2": jsc,
                                          "eta_col": round(eta, 4), "Voc_V": m["Voc_V"],
-                                         "FF": m["FF"], "PCE_pct": m["PCE_pct"]})
+                                         "FF": m["FF"], "PCE_pct": m["PCE_pct"],
+                                         "note": f"부분회수 {V.size}점[~{_last_v:.2f}V]"})
                             jv_curves.append((f"W{w:g}/g{g:g}*", V, Jgen))
                             log(f"  ↺ 부분 스윕 회수 성공: {V.size}점 [0..{V.max():.2f}V] — "
                                 f"Jsc {jsc} / Voc {m['Voc_V']} / PCE {m['PCE_pct']}% "
@@ -1125,11 +1374,15 @@ def _run_ibc3d(jid, params, log, get_client):
             if not recovered:
                 log("  — NaN 기록, 다음 진행")
                 fail_row = {"W_um": w, "gap_um": g, "Jsc_mA_cm2": float("nan"),
-                            "eta_col": float("nan")}
+                            "eta_col": float("nan"), "note": "실패(사다리 소진)"}
                 if jv_mode == "full_jv":  # 히트맵 키 일치 (실패행 KeyError 방지)
                     fail_row.update({"Voc_V": float("nan"), "FF": float("nan"),
                                      "PCE_pct": float("nan")})
                 rows.append(fail_row)
+            # '왜 실패했나' 진단문 — 로그 + fail_diagnosis.txt (④ 작업 상세에 표시)
+            diag = _diagnose_fail(f"W{w:g}/g{g:g}", _hist, recovered, _last_v)
+            log(diag)
+            fail_notes.append(diag)
         finally:
             try:
                 if model is not None:
@@ -1156,6 +1409,14 @@ def _run_ibc3d(jid, params, log, get_client):
             log("J-V 곡선 저장: jv.png (+ 재플롯용 jv_curves.csv)")
         except Exception as e:
             log(f"⚠️ J-V 플롯 실패: {type(e).__name__}: {e}")
+    if fail_notes:  # 실패/부분회수 진단서 — ④ 작업 상세 인라인 표시용 (2026-07-13)
+        try:
+            (jd / "fail_diagnosis.txt").write_text(
+                "실패·부분회수 셀 진단 — 같은 물리인데 왜 이 치수만 실패했나\n"
+                + "=" * 62 + "\n\n" + "\n\n".join(fail_notes) + "\n", encoding="utf-8")
+            log(f"\n실패 진단서 저장: fail_diagnosis.txt ({len(fail_notes)}건)")
+        except Exception as e:
+            log(f"⚠️ 진단서 저장 실패: {type(e).__name__}")
     ok = [r for r in rows if r["Jsc_mA_cm2"] == r["Jsc_mA_cm2"]]
     if ok:
         best = max(ok, key=lambda r: r["Jsc_mA_cm2"])

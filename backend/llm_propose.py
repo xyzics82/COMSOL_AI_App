@@ -223,6 +223,91 @@ def parse_case_response(raw: str) -> dict:
     return {"draft": draft, "validation": library.validate_case_draft(draft), "source": "paste"}
 
 
+# ------------- 모델 수정 모드 (2026-07-13): 기존 케이스+입력값 → 수정본 -------------
+# 검토(솔브 전)·결과 확인(솔브 후) 어느 시점이든, 문맥을 모르는 외부 AI에 복붙해도
+# 수정된 입력을 받을 수 있도록 현재 케이스 정의와 입력값 전체를 프롬프트에 내장한다.
+
+MOD_RULES = (
+    "너는 COMSOL 시뮬레이션 웹앱의 '모델 수정 도우미'다. 아래에 현재 케이스 정의(스키마)와 "
+    "현재 입력값 전체가 있다. 사용자의 수정 요청을 반영한 새 입력값을 만들어라.\n"
+    "규칙:\n"
+    "1) 케이스 스키마에 있는 필드만 바꿀 수 있다. 스키마로 표현할 수 없는 수정(새 물리, 새 재료, "
+    "지오메트리 형태 변경 등)은 지어내지 말고 not_supported에 '무엇이 왜 안 되는지'를 적어라 — "
+    "그 부분은 앱 개발(Claude 세션)에서 처리한다.\n"
+    "2) 값을 지어내지 마라. 사용자가 명시했거나 단위 환산으로 명확한 값만 바꾸고, "
+    "바꾼 필드는 changed에 '필드: 이전값 → 새값 (이유)' 형식으로 나열하라.\n"
+    "3) 바꾸지 않는 필드는 현재 입력값을 그대로 복사하라 (params에는 전체 필드를 담는다).\n"
+    "4) 수치 안정성 주의사항이 스키마 label에 적혀 있으면 존중하라 (예: hmax 80 발산, 2V 스윕 발산).\n"
+    "5) 모든 텍스트는 한국어.\n"
+)
+
+
+def _mod_output_format():
+    return (
+        "\n\n출력 형식: 아래 스키마의 JSON 객체 '하나만' ```json 코드블록으로 출력하라. "
+        "코드블록 밖에는 아무 것도 쓰지 마라.\n"
+        '{"params": {"<필드key>": "<값(문자열)>", "...": "전체 필드"}, '
+        '"changed": ["필드: 이전값 → 새값 (이유)"], '
+        '"not_supported": ["스키마로 불가한 요청과 이유"], '
+        '"warnings": ["주의사항"], "rationale": "수정 요약(한국어)"}'
+    )
+
+
+def build_mod_prompt(case_id: str, cur_params: dict, text: str) -> str:
+    """복붙 모드: 모델 수정 프롬프트 — 케이스 정의+현재 입력값을 내장(문맥 무관 AI용)."""
+    case = next((c for c in _cases() if c["id"] == case_id), None)
+    if case is None:
+        raise ValueError(f"알 수 없는 케이스: {case_id}")
+    ctx = {"case": {"id": case["id"], "name": case["name"], "desc": case["desc"],
+                    "schema": case["schema"]},
+           "current_params": {k: str(v) for k, v in (cur_params or {}).items()}}
+    return (MOD_RULES + "\n현재 케이스와 입력값(JSON):\n"
+            + json.dumps(ctx, ensure_ascii=False) + _mod_output_format()
+            + "\n\n사용자의 수정 요청:\n" + (text or "").strip())
+
+
+def parse_mod_response(raw: str, case_id: str) -> dict:
+    """복붙 모드: 수정 응답 검증 — 스키마 밖 필드 제거, 문자열화. 폼 반영용."""
+    import re
+    text = (raw or "").strip()
+    if not text:
+        raise ValueError("붙여넣은 내용이 비어 있습니다")
+    candidates = []
+    m = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.S)
+    if m:
+        candidates.append(m.group(1))
+    i, j = text.find("{"), text.rfind("}")
+    if i >= 0 and j > i:
+        candidates.append(text[i:j + 1])
+    data, last_err = None, None
+    for c in candidates:
+        try:
+            data = json.loads(c)
+            break
+        except json.JSONDecodeError as e:
+            last_err = e
+    if data is None:
+        raise ValueError(f"응답에서 유효한 JSON을 찾지 못했습니다 ({last_err})")
+    case = next((c for c in _cases() if c["id"] == case_id), None)
+    if case is None:
+        raise ValueError(f"알 수 없는 케이스: {case_id}")
+    schema_keys = {f["key"] for f in case["schema"]}
+    warnings = [str(w) for w in (data.get("warnings") or [])]
+    params = {}
+    for k, v in dict(data.get("params") or {}).items():
+        if k in schema_keys:
+            params[k] = str(v)
+        else:
+            warnings.append(f"알 수 없는 입력 '{k}'은(는) 무시했습니다")
+    if not params:
+        raise ValueError("params가 비어 있습니다 — AI 답변 전체를 붙여넣었는지 확인")
+    return {"case_id": case_id, "params": params,
+            "changed": [str(x) for x in (data.get("changed") or [])],
+            "not_supported": [str(x) for x in (data.get("not_supported") or [])],
+            "warnings": warnings,
+            "rationale": str(data.get("rationale") or ""), "source": "paste"}
+
+
 def status():
     try:
         import anthropic  # noqa: F401

@@ -207,6 +207,28 @@ def nl_case_apply(body: dict):
         raise HTTPException(400, str(e))
 
 
+@app.post("/api/nl/mod_prompt")
+def nl_mod_prompt(body: dict):
+    """모델 수정 모드 1단계 (2026-07-13): 케이스 정의+현재 입력값을 내장한
+    자가완결 프롬프트 생성 — 문맥 없는 외부 AI에 복붙해도 수정본이 나온다."""
+    b = body or {}
+    try:
+        return {"prompt": llm_propose.build_mod_prompt(
+            str(b.get("case_id", "")), b.get("params") or {}, str(b.get("text", "")))}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/nl/mod_apply")
+def nl_mod_apply(body: dict):
+    """모델 수정 모드 2단계: 챗 AI의 수정 응답 검증 → 폼 반영용 params 반환."""
+    b = body or {}
+    try:
+        return llm_propose.parse_mod_response(str(b.get("raw", "")), str(b.get("case_id", "")))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.post("/api/diagnostics")
 def run_diagnostics():
     jid = jobs.create_job("diagnostics", {})
@@ -375,6 +397,30 @@ def get_log(jid: str):
 @app.get("/api/jobs/{jid}/artifacts")
 def get_artifacts(jid: str):
     return jobs.artifacts(jid)
+
+
+@app.get("/api/jobs/{jid}/timeline")
+def job_timeline(jid: str):
+    """log.txt → 타임라인(Gantt) 구간 JSON (2026-07-13) — ④ 작업 상세의 ⏱ 그래프용."""
+    from . import timeline
+    return timeline.parse(jobs.read_log(jid))
+
+
+@app.post("/api/jobs/{jid}/solve_reviewed")
+def solve_reviewed(jid: str):
+    """검토 완료 → 해 구하기 (2026-07-13): review 작업의 unsolved 빌드를 그대로
+    재사용(resume_from)해 1단계 없이 솔브만 수행하는 새 작업 생성."""
+    j = jobs.get_job(jid)
+    if not j:
+        raise HTTPException(404, "no such job")
+    p = dict(j.get("params") or {})
+    if not (jobs.job_dir(jid) / "build_manifest.json").exists():
+        raise HTTPException(400, "이 작업에는 재사용할 빌드 매니페스트가 없습니다 (review 작업이 아님)")
+    p["mode"] = "local"
+    p["resume_from"] = jid
+    new_jid = jobs.create_job("case_run", p)
+    runner.submit(new_jid)
+    return {"job_id": new_jid}
 
 
 @app.get("/api/jobs/{jid}/artifacts/{name}")
