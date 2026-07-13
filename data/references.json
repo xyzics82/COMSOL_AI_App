@@ -30,7 +30,7 @@
     ]
   },
   "stranks2014": {
-    "citation": "Stranks et al., Science 342, 341 (2014) — 확산길이 ~1um (τ=38.7ns 유도 근거)",
+    "citation": "Stranks et al., Science 342, 341–344 (2013) — 확산길이 >1um (τ=38.7ns 유도 근거; ref id는 호환성을 위해 유지)",
     "url": "https://doi.org/10.1126/science.1243982",
     "used_for": [
       "mapbi3.taun(유도)"

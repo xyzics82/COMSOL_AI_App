@@ -224,7 +224,8 @@ def nl_mod_apply(body: dict):
     """모델 수정 모드 2단계: 챗 AI의 수정 응답 검증 → 폼 반영용 params 반환."""
     b = body or {}
     try:
-        return llm_propose.parse_mod_response(str(b.get("raw", "")), str(b.get("case_id", "")))
+        return llm_propose.parse_mod_response(
+            str(b.get("raw", "")), str(b.get("case_id", "")), b.get("current_params"))
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -391,17 +392,23 @@ def cancel_job(jid: str):
 
 @app.get("/api/jobs/{jid}/log", response_class=PlainTextResponse)
 def get_log(jid: str):
+    if not jobs.get_job(jid):
+        raise HTTPException(404, "no such job")
     return jobs.read_log(jid)
 
 
 @app.get("/api/jobs/{jid}/artifacts")
 def get_artifacts(jid: str):
+    if not jobs.get_job(jid):
+        raise HTTPException(404, "no such job")
     return jobs.artifacts(jid)
 
 
 @app.get("/api/jobs/{jid}/timeline")
 def job_timeline(jid: str):
     """log.txt → 타임라인(Gantt) 구간 JSON (2026-07-13) — ④ 작업 상세의 ⏱ 그래프용."""
+    if not jobs.get_job(jid):
+        raise HTTPException(404, "no such job")
     from . import timeline
     return timeline.parse(jobs.read_log(jid))
 
@@ -413,18 +420,55 @@ def solve_reviewed(jid: str):
     j = jobs.get_job(jid)
     if not j:
         raise HTTPException(404, "no such job")
+    if not (j["kind"] == "case_run" and j["status"] == "done"
+            and j.get("params", {}).get("mode") == "review"
+            and not j.get("params", {}).get("resume_from")):
+        raise HTTPException(409, "완료된 원본 review 작업만 솔브를 시작할 수 있습니다")
     p = dict(j.get("params") or {})
-    if not (jobs.job_dir(jid) / "build_manifest.json").exists():
+    if str(p.get("hpc_only", "")).lower() in ("yes", "true", "1"):
+        raise HTTPException(400, "HPC 전용 검토 모델은 이 앱에서 local 솔브할 수 없습니다 — run_server.bat으로 서버에서 실행하세요")
+    try:  # 깍지 배열 봉인 (버튼에서 즉시 안내 — 워커의 같은 가드보다 빠른 피드백)
+        if int(float(p.get("n_pairs") or 0)) >= 1:
+            raise HTTPException(400, "깍지 배열(n_pairs≥1) 검토 모델은 평형 수렴 미검증으로 "
+                                     "local 솔브가 봉인되어 있습니다 (review/export만 가능)")
+    except (TypeError, ValueError):
+        raise HTTPException(400, "n_pairs 값이 올바르지 않습니다")
+    if not p.get("case_id"):
+        raise HTTPException(400, "review 작업의 case_id가 누락되었습니다")
+    manifest_path = jobs.job_dir(jid) / "build_manifest.json"
+    if not manifest_path.exists():
         raise HTTPException(400, "이 작업에는 재사용할 빌드 매니페스트가 없습니다 (review 작업이 아님)")
+    if not (jobs.job_dir(jid) / "model_review.md").is_file():
+        raise HTTPException(409, "model_review.md가 없어 검토 완료 솔브를 시작할 수 없습니다")
+    try:
+        import json
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        combos = manifest.get("combos") or []
+        if not combos:
+            raise ValueError("조합 목록이 비어 있음")
+        for combo in combos:
+            if not isinstance(combo, dict):
+                raise ValueError("조합 항목이 객체가 아님")
+            fname = str(combo.get("fname") or "")
+            if not fname or Path(fname).name != fname or not (jobs.job_dir(jid) / fname).is_file():
+                raise ValueError(f"재사용할 모델 파일 누락/오류: {fname or '(빈 이름)'}")
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError) as e:
+        raise HTTPException(400, f"빌드 매니페스트 검증 실패: {e}")
     p["mode"] = "local"
     p["resume_from"] = jid
-    new_jid = jobs.create_job("case_run", p)
-    runner.submit(new_jid)
-    return {"job_id": new_jid}
+    try:
+        new_jid, created = jobs.create_job_once("case_run", p, "resume_from")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if created:
+        runner.submit(new_jid)
+    return {"job_id": new_jid, "created": created}
 
 
 @app.get("/api/jobs/{jid}/artifacts/{name}")
 def download(jid: str, name: str):
+    if not jobs.get_job(jid):
+        raise HTTPException(404, "no such job")
     p = jobs.job_dir(jid) / Path(name).name  # 경로 탈출 방지
     if not p.exists():
         raise HTTPException(404)

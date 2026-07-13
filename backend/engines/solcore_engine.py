@@ -3,7 +3,7 @@
 v0 케이스 2종:
 1) solcore_tmm_stack : 공기/MAPbI3(t)/공기 TMM — R/A/T 스펙트럼 + AM1.5 가중 G(depth)
    + Jsc,opt. COMSOL 파동광학(v3, wo_optics)과 '같은 문제'라 직접 대조 검증 가능
-   (기준: t=800nm에서 A(550)=0.8216, Jsc,opt=22.50 mA/cm²).
+   (기준: t=800nm에서 A(550)=0.8216. Jsc,opt는 같은 파장 격자끼리 대조).
 2) solcore_sq_limit  : Shockley-Queisser 상한 (AM1.5 데이터 + 300K 흑체 복사 —
    자체 수식, 임의 파라미터 없음). Eg 스윕 곡선 + 대상 Eg 마커.
 
@@ -55,14 +55,13 @@ def _slab_rat_profile(t_abs_nm, lams_nm, nk, nz=200):
 
 def _g_from_profile(zs, a_zl, lams_nm, am15):
     """AM1.5 가중 G(z) [1/(m^3 s)] + Jsc,opt [mA/cm^2] (wo_optics와 동일 정의)."""
-    dlam = lams_nm[1] - lams_nm[0]
+    if len(lams_nm) < 2:
+        raise ValueError("광학 파장 샘플 수는 2 이상이어야 합니다")
     F = np.interp(lams_nm, am15[:, 0], am15[:, 1])           # W/m^2/nm
     phi = F * (lams_nm * 1e-9) / (H * C)                     # photons/(m^2 s nm)
-    G = np.zeros(len(zs))
-    for i in range(len(lams_nm)):
-        G += a_zl[:, i] * 1e9 * phi[i] * dlam                # [1/nm→1/m] × Φ dλ
+    G = np.trapezoid(a_zl * phi[np.newaxis, :], lams_nm, axis=1) * 1e9
     A_int = np.trapezoid(a_zl, zs, axis=0)                    # = A(λ)
-    jsc = Q * np.sum(A_int * phi * dlam) * 0.1                # A/m² → mA/cm²
+    jsc = Q * np.trapezoid(A_int * phi, lams_nm) * 0.1        # A/m² → mA/cm²
     return G, jsc
 
 
@@ -93,8 +92,8 @@ def _run_tmm_stack(jid, params, log):
         a550 = float(np.interp(550.0, lams, A))
         log(f"  t={t:g}nm: A(550)={a550:.4f}, Jsc,opt={jsc:.2f} mA/cm²")
         if abs(t - 800.0) < 1e-9:
-            log("    [대조] COMSOL 파동광학 기준(t=800): A(550)=0.8216 / Jsc,opt=22.50 — "
-                f"이번 값 {a550:.4f} / {jsc:.2f}")
+            log("    [대조] COMSOL 파동광학 기준 A(550)=0.8216 — "
+                f"이번 값 {a550:.4f}; Jsc,opt={jsc:.2f}는 같은 λ 격자 결과와 비교")
         ax1.plot(lams, A, lw=1.3, label=f"A t={t:g}nm")
         ax2.plot(zs, G, lw=1.3, label=f"t={t:g}nm")
         for lam, r, a, tt in zip(lams, R, A, T):

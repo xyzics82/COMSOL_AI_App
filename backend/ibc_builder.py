@@ -219,7 +219,9 @@ def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, vcfg, log, g_profile
         f3.set("funcname", "Gwo")
         _try_set(f3, [("argunit", ["nm"]), ("argunit", "nm")], log, "int3")
         _try_set(f3, [("fununit", ["1/(m^3*s)"]), ("fununit", "1/(m^3*s)")], log, "int3")
-        expr = f"Gwo({H:g}[nm]-y)"
+        depth = f"({H:g}[nm]-y)"
+        expr = (f"Gwo({depth})*({depth}>=0[nm])*"
+                f"({depth}<={t_abs_nm:g}[nm])")
         log(f"  광생성 OK: 파동광학 G(depth) 보간 주입 ({len(g_profile['G'])}점, "
             f"Jsc,opt={g_profile['jsc_wave']:.2f} mA/cm²)")
     else:
@@ -238,8 +240,10 @@ def build(client, name, mats, w_nm, gap_nm, t_abs_nm, taun, vcfg, log, g_profile
         f2.set("funcname", "kref")
         _try_set(f2, [("argunit", ["um"]), ("argunit", "um")], log, "int2")
         _try_set(f2, [("fununit", ["1"]), ("fununit", "1")], log, "int2")
-        expr = (f"4*pi/(h_const*c_const)*integrate(kref(lm)*F(lm)*"
-                f"exp(-4*pi*kref(lm)*({H:g}[nm]-y)/lm),lm,300[nm],850[nm])")
+        depth = f"({H:g}[nm]-y)"
+        expr = (f"(4*pi/(h_const*c_const)*integrate(kref(lm)*F(lm)*"
+                f"exp(-4*pi*kref(lm)*{depth}/lm),lm,300[nm],850[nm]))*"
+                f"({depth}>=0[nm])*({depth}<={t_abs_nm:g}[nm])")
         log(f"  광생성 OK: Beer-Lambert (깊이 = {H:g}nm − y), 음영 없음(IBC)")
     try:
         var = comp.variable().create("var1")

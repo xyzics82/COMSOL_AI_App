@@ -49,7 +49,7 @@ x=0 (광 입사, 접지)                          x=L (V0 인가)
 | 비유전율 εr | 10 | Sahu & Dixit 표 1 (⚠️ Minemoto & Murata, JAP 116, 054505 (2014)는 6.5 사용 — 민감도 확인 항목) |
 | 전자/정공 이동도 μ | 10 / 10 cm²/Vs | Wehrenfennig et al., Adv. Mater. 26, 1584 (2014) |
 | Nc / Nv | 2.75e18 / 3.9e18 cm⁻³ | Giorgi et al., JPCL 4, 4213 (2013) 유효질량 기반 (m*e≈0.23, m*h≈0.29) |
-| SRH 수명 τ | 38.7 ns | 유도값: L≈1 μm (Stranks et al., Science 342, 341 (2014)) + μ=10 → D=0.2585 cm²/s, τ=L²/D |
+| SRH 수명 τ | 38.7 ns | 유도값: L≈1 μm (Stranks et al., Science 342, 341–344 (2013)) + μ=10 → D=0.2585 cm²/s, τ=L²/D |
 | n,k(λ) | Phillips 2015 데이터 | refractiveindex.info CH3NH3PbI3/Phillips (ellipsometry, 300–1500 nm) |
 | 스펙트럼 F(λ) | AM1.5 근사 | COMSOL 예제 동봉 파일 (원출처 NREL) — ⚠️ 근사 데이터, 아래 7절 |
 

@@ -236,8 +236,10 @@
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-let curJob = null, cases = [], jdJob = null;
+let curJob = null, cases = [], jdJob = null, detailSeq = 0;
 let jdLastLog = "", jdLastArtsSig = "", jdLastStatus = "";  // 변경 없으면 다시 안 그림 (깜빡임 방지)
+const formDrafts = {};
+let renderedSchemaKey = null;
 
 // 탭
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
@@ -552,6 +554,19 @@ function fillCaseSelect() {
   $("#caseSel").innerHTML = list.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
   if (!list.length) $("#caseSel").innerHTML = `<option value="">이 엔진의 케이스 없음</option>`;
 }
+
+function saveRenderedDraft() {
+  if (!renderedSchemaKey) return;
+  const oldCaseId = renderedSchemaKey.slice(renderedSchemaKey.indexOf(":") + 1);
+  const oldCase = cases.find(x => x.id === oldCaseId);
+  if (!oldCase) return;
+  const draft = {};
+  oldCase.schema.forEach(f => {
+    const el = document.getElementById("f_" + f.key);
+    if (el) draft[f.key] = el.value;
+  });
+  formDrafts[renderedSchemaKey] = draft;
+}
 async function engineImport() {
   const c = cases.find(x => x.id === $("#caseSel").value);
   const files = $("#importFiles").files;
@@ -575,26 +590,44 @@ async function loadCases() {
 }
 function renderSchema() {
   const c = cases.find(x => x.id === $("#caseSel").value);
-  if (!c) { $("#caseDesc").textContent = ""; $("#schema").innerHTML = ""; $("#caseData").textContent = ""; return; }
+  if (!c) {
+    saveRenderedDraft();
+    renderedSchemaKey = null;
+    $("#caseDesc").textContent = "";
+    $("#schema").innerHTML = "";
+    $("#caseData").textContent = "";
+    return;
+  }
+  const nextKey = `${curEngine}:${c.id}`;
+  if (renderedSchemaKey === nextKey && $("#schema").children.length) {
+    updateCaseData(c);
+    return;
+  }
+  saveRenderedDraft();
+  const draft = formDrafts[nextKey] || {};
   $("#caseDesc").textContent = c.desc;
   $("#schema").innerHTML = c.schema.map(f => {
+    const value = String(Object.hasOwn(draft, f.key) ? draft[f.key] : f.default ?? "");
     if (f.type === "select")
       return `<div class="field"><label>${f.label}</label><select id="f_${f.key}">` +
-        f.options.map(o => `<option ${o===f.default?"selected":""}>${o}</option>`).join("") + `</select></div>`;
-    return `<div class="field"><label>${f.label}</label><input id="f_${f.key}" value="${f.default}"></div>`;
+        f.options.map(o => `<option ${String(o)===value?"selected":""}>${esc(o)}</option>`).join("") + `</select></div>`;
+    return `<div class="field"><label>${f.label}</label><input id="f_${f.key}" value="${esc(value)}"></div>`;
   }).join("");
+  renderedSchemaKey = nextKey;
   updateCaseData(c);
 }
 async function updateCaseData(c) {
+  const schemaKey = `${curEngine}:${c.id}`;
   try {
     const ds = await api("/api/data/status");
+    if (renderedSchemaKey !== schemaKey) return;
     const need = ds.filter(d => d.required_by.includes(c.id));
     if (!need.length) { $("#caseData").textContent = ""; return; }
     const lack = need.some(d => !d.ready);
     $("#caseData").innerHTML = "필요 데이터: " + need.map(d =>
       `${d.name} <b class="${d.ready?'ok':'no'}">${d.ready?'준비됨':'없음'}</b>`).join(" · ") +
       (lack ? ` — <a href="#" onclick="document.querySelector('nav button[data-tab=&quot;data&quot;]').click();return false">③ 데이터 준비로 이동</a>` : "");
-  } catch { $("#caseData").textContent = ""; }
+  } catch { if (renderedSchemaKey === schemaKey) $("#caseData").textContent = ""; }
 }
 function nlMode() { return document.querySelector('input[name="nlmode"]:checked').value; }
 function nlModeChanged() {
@@ -760,6 +793,7 @@ async function loadJobs() {
 }
 function openJob(jid) {
   curJob = jid;
+  detailSeq++;
   jdLastLog = ""; jdLastArtsSig = ""; jdLastStatus = "";  // 새 작업 → 강제 갱신
   ["jdReview", "jdDiag", "jdTlBox", "jdMod"].forEach(id => {  // 이전 작업 패널 정리
     const el = document.getElementById(id);
@@ -771,10 +805,12 @@ function openJob(jid) {
 }
 async function refreshDetail() {
   if (!curJob) return;
+  const jid = curJob, seq = ++detailSeq;
   try {
-    const j = await api(`/api/jobs/${curJob}`);
+    const j = await api(`/api/jobs/${jid}`);
+    if (jid !== curJob || seq !== detailSeq) return;
     // 작업 상세 헤더에 사용 프로그램 명시 (어떤 엔진의 결과인지 혼동 방지)
-    $("#jdId").textContent = `${curJob} — ${jobEngine(j)}` +
+    $("#jdId").textContent = `${jid} — ${jobEngine(j)}` +
       (j.params && j.params.case_id ? ` · ${j.params.case_id}` : "");
     const needDongle = j.status === "failed" && /동글|라이선스|license/i.test(j.message || "");
     $("#dongleAlert").hidden = !needDongle;
@@ -784,13 +820,15 @@ async function refreshDetail() {
       (j.message || "") + "</span>";
     $("#jdCancel").hidden = !(j.status === "running" || j.status === "queued");
     jdJob = j;
-    renderReviewPanel(j);  // 검토 모드: 검토서 + [해 구하기] 버튼
+    renderReviewPanel(j, jid);  // 검토 모드: 검토서 + [해 구하기] 버튼
     renderModPanel(j);     // 모델 수정 (복붙 모드)
     if (j.status !== jdLastStatus) { jdLastStatus = j.status; loadJobs(); }  // 상태 바뀔 때만 목록 갱신
-  } catch {}
-  const log = await api(`/api/jobs/${curJob}/log`);
+  } catch { return; }
+  const log = await api(`/api/jobs/${jid}/log`);
+  if (jid !== curJob || seq !== detailSeq) return;
   if (log !== jdLastLog) { jdLastLog = log; $("#jdLog").textContent = log; }
-  const arts = await api(`/api/jobs/${curJob}/artifacts`);
+  const arts = await api(`/api/jobs/${jid}/artifacts`);
+  if (jid !== curJob || seq !== detailSeq) return;
   const sig = arts.map(a => a.name + ":" + a.size + ":" + (a.mtime || 0)).join("|");
   if (sig !== jdLastArtsSig) { jdLastArtsSig = sig; renderArtifacts(arts); }
 }
@@ -826,29 +864,39 @@ function fmtSize(b) {
 // ---- 실패 진단 인라인 (fail_diagnosis.txt → 접이식 카드, 2026-07-13) ----
 async function loadFailDiag(a) {
   const box = $("#jdDiag");
-  if (box.dataset.for === curJob + ":" + a.size) return;  // 같은 내용이면 다시 안 그림
-  box.dataset.for = curJob + ":" + a.size;
+  const jid = curJob;
+  if (box.dataset.for === jid + ":" + a.size) return;  // 같은 내용이면 다시 안 그림
+  box.dataset.for = jid + ":" + a.size;
   try {
-    const t = await (await fetch(`/api/jobs/${curJob}/artifacts/${a.name}?v=${a.size}`)).text();
+    const t = await (await fetch(`/api/jobs/${jid}/artifacts/${a.name}?v=${a.size}`)).text();
+    if (jid !== curJob || box.dataset.for !== jid + ":" + a.size) return;
     box.innerHTML = `<details open style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px;margin:8px 0">
       <summary style="cursor:pointer"><b>🩺 실패·부분회수 진단</b> — 같은 물리인데 왜 이 치수만 실패했나 (셀별 시도 이력)</summary>
       <pre style="white-space:pre-wrap;font-size:12px;max-height:320px;overflow:auto;margin:6px 0 0">${esc(t)}</pre></details>`;
-  } catch { box.innerHTML = ""; delete box.dataset.for; }
+  } catch {
+    if (jid === curJob && box.dataset.for === jid + ":" + a.size) {
+      box.innerHTML = ""; delete box.dataset.for;
+    }
+  }
 }
 
 // ---- 타임라인 그래프 (log.txt → Gantt SVG, 2026-07-13) ----
 async function loadTimeline() {
   if (!curJob) return;
+  const jid = curJob;
   const box = $("#jdTlBox");
   box.innerHTML = `<span class="hint">타임라인 생성 중...</span>`;
   try {
-    const d = await api(`/api/jobs/${curJob}/timeline`);
+    const d = await api(`/api/jobs/${jid}/timeline`);
+    if (jid !== curJob) return;
     if (!d.rows || !d.rows.length) {
       box.innerHTML = `<span class="hint">타임라인으로 만들 로그 구간이 없습니다 (진행 전이거나 로그가 짧음)</span>`;
       return;
     }
     box.innerHTML = tlSvg(d);
-  } catch (e) { box.innerHTML = `<span class="hint">타임라인 실패: ${esc(e.message)}</span>`; }
+  } catch (e) {
+    if (jid === curJob) box.innerHTML = `<span class="hint">타임라인 실패: ${esc(e.message)}</span>`;
+  }
 }
 function tlFmt(s) {
   s = Math.round(s);
@@ -892,7 +940,7 @@ function tlSvg(d) {
 }
 
 // ---- 모델 검토 워크플로 (review 모드: 검토서 확인 → 해 구하기, 2026-07-13) ----
-function renderReviewPanel(j) {
+function renderReviewPanel(j, jid) {
   const box = $("#jdReview");
   const isRev = j.kind === "case_run" && j.params && j.params.mode === "review" && !j.params.resume_from;
   if (!isRev || j.status !== "done") {
@@ -901,26 +949,34 @@ function renderReviewPanel(j) {
   }
   if (box.dataset.for === curJob) return;
   box.dataset.for = curJob;
+  const hpcOnly = ["yes", "true", "1"].includes(String(j.params.hpc_only || "").toLowerCase());
   box.innerHTML = `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:10px;margin:8px 0">
     <b>🔍 모델 검토 대기</b> — unsolved 모델이 만들어졌습니다 (솔브 전).
     아래 검토서(모폴로지·경계조건·물성·메시·스터디)와 개략도를 확인하세요.
     <div class="row" style="margin:8px 0">
-      <button class="act" onclick="solveReviewed()">✅ 검토 완료 — 해 구하기 (이 빌드 그대로 솔브)</button>
-      <span class="hint">수정이 필요하면 맨 아래 [🛠 모델 수정]에 요청을 쓰세요</span>
+      ${hpcOnly ? `<span class="hint"><b>HPC 전용:</b> 이 앱에서는 솔브하지 않습니다. 산출물의 run_server.bat과 unsolved 모델을 서버에서 실행하세요.</span>` :
+        `<button id="solveReviewedBtn" class="act" onclick="solveReviewed()">✅ 검토 완료 — 해 구하기 (이 빌드 그대로 솔브)</button>
+         <span class="hint">수정이 필요하면 맨 아래 [🛠 모델 수정]에 요청을 쓰세요</span>`}
     </div>
     <div id="jdReviewMd" class="hint">검토서 불러오는 중...</div></div>`;
-  fetch(`/api/jobs/${curJob}/artifacts/model_review.md`)
+  fetch(`/api/jobs/${jid}/artifacts/model_review.md`)
     .then(r => { if (!r.ok) throw 0; return r.text(); })
-    .then(t => { $("#jdReviewMd").innerHTML =
+    .then(t => { if (jid === curJob && $("#jdReviewMd")) $("#jdReviewMd").innerHTML =
       `<pre style="white-space:pre-wrap;font-size:12px;max-height:360px;overflow:auto;background:#fff;border-radius:6px;padding:8px">${esc(t)}</pre>`; })
-    .catch(() => { $("#jdReviewMd").textContent = "검토서(model_review.md)가 아직 없습니다 — 로그 확인"; });
+    .catch(() => { if (jid === curJob && $("#jdReviewMd")) $("#jdReviewMd").textContent = "검토서(model_review.md)가 아직 없습니다 — 로그 확인"; });
 }
 async function solveReviewed() {
   if (!confirm("이 빌드 그대로 솔브를 시작할까요?\n(1단계 생략 — 검토한 unsolved 모델을 복사해 바로 순차 솔브. 메시 사다리 자동 적용)")) return;
+  const jid = curJob, btn = $("#solveReviewedBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "솔브 작업 생성 중..."; }
   try {
-    const r = await api(`/api/jobs/${curJob}/solve_reviewed`, {method: "POST"});
+    const r = await api(`/api/jobs/${jid}/solve_reviewed`, {method: "POST"});
+    if (jid !== curJob) return;
     openJob(r.job_id);
-  } catch (e) { alert("솔브 시작 실패: " + e.message); }
+  } catch (e) {
+    if (jid === curJob && btn) { btn.disabled = false; btn.textContent = "✅ 검토 완료 — 해 구하기 (이 빌드 그대로 솔브)"; }
+    if (jid === curJob) alert("솔브 시작 실패: " + e.message);
+  }
 }
 
 // ---- 모델 수정 (복붙 모드): 케이스+입력값 내장 프롬프트 → 외부 AI → 폼 반영 ----
@@ -949,25 +1005,29 @@ async function modPrompt() {
   const text = $("#modText").value.trim();
   if (!text) return alert("수정 요청을 입력하세요");
   if (!jdJob || !jdJob.params) return alert("작업 정보를 아직 못 읽었습니다 — 새로고침 후 다시");
+  const jid = curJob, baseJob = jdJob;
   try {
     const r = await api("/api/nl/mod_prompt", {method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({case_id: jdJob.params.case_id, params: jdJob.params, text})});
+      body: JSON.stringify({case_id: baseJob.params.case_id, params: baseJob.params, text})});
+    if (jid !== curJob || baseJob !== jdJob) return;
     const out = $("#modPromptOut"); out.style.display = "block"; out.value = r.prompt;
     try {
       await navigator.clipboard.writeText(r.prompt);
       $("#modMsg").textContent = "복사됨 — 구독 챗(claude.ai 등)에 붙여넣고, AI 답변을 ②에 붙여넣으세요";
     } catch { $("#modMsg").textContent = "자동 복사 실패 — 아래 박스에서 직접 복사하세요"; }
-  } catch (e) { alert("프롬프트 생성 실패: " + e.message); }
+  } catch (e) { if (jid === curJob) alert("프롬프트 생성 실패: " + e.message); }
 }
 async function modApply() {
   const raw = $("#modPaste").value.trim();
   if (!raw) return alert("AI 답변을 붙여넣으세요");
   if (!jdJob || !jdJob.params) return alert("작업 정보를 아직 못 읽었습니다");
+  const jid = curJob, baseJob = jdJob;
   try {
     const r = await api("/api/nl/mod_apply", {method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({case_id: jdJob.params.case_id, raw})});
+      body: JSON.stringify({case_id: baseJob.params.case_id, current_params: baseJob.params, raw})});
+    if (jid !== curJob || baseJob !== jdJob) return;
     let h = `<b>✔ 수정 검증됨</b>${r.rationale ? " — " + esc(r.rationale) : ""}`;
     if (r.changed?.length) h += `<br><b>변경:</b> ${r.changed.map(esc).join(" · ")}`;
     if (r.not_supported?.length) h += `<br><b style="color:#991b1b">폼으로 불가(앱 개발 필요 — Claude에게 요청):</b> ${r.not_supported.map(esc).join(" · ")}`;
@@ -976,7 +1036,7 @@ async function modApply() {
     document.querySelector('nav button[data-tab="run"]').click();
     const sel = $("#caseSel");
     if (![...sel.options].some(o => o.value === r.case_id)) {
-      h += `<br><b style="color:#991b1b">⚠️ 현재 엔진 탭에 이 케이스가 없습니다 — 상단에서 '${esc(jdJob.params.engine || "comsol")}' 엔진 탭을 먼저 선택하세요</b>`;
+      h += `<br><b style="color:#991b1b">⚠️ 현재 엔진 탭에 이 케이스가 없습니다 — 상단에서 '${esc(baseJob.params.engine || "comsol")}' 엔진 탭을 먼저 선택하세요</b>`;
     } else {
       sel.value = r.case_id;
       renderSchema();
@@ -984,12 +1044,16 @@ async function modApply() {
         const el = document.getElementById("f_" + k);
         if (el) el.value = v;
       }
+      formDrafts[`${curEngine}:${r.case_id}`] = {...r.params};
       h += `<br>② 실행 폼에 반영했습니다 — 값 확인 후 실행하세요. <b>검토부터 다시</b> 하려면 mode를 review로 두세요`;
     }
     $("#modResult").innerHTML = h;
     const nr = $("#nlResult");  // 탭이 ②로 넘어가므로 거기서도 보이게
     if (nr) { nr.hidden = false; nr.innerHTML = `<b>🛠 모델 수정 반영</b><br>` + h; }
-  } catch (e) { $("#modResult").textContent = "적용 실패: " + e.message; }
+  } catch (e) {
+    const result = $("#modResult");
+    if (jid === curJob && result) result.textContent = "적용 실패: " + e.message;
+  }
 }
 function artLink(a, label) {
   if (!a) return `<span class="hint">–</span>`;

@@ -255,6 +255,8 @@ def _mod_output_format():
 
 def build_mod_prompt(case_id: str, cur_params: dict, text: str) -> str:
     """복붙 모드: 모델 수정 프롬프트 — 케이스 정의+현재 입력값을 내장(문맥 무관 AI용)."""
+    if not (text or "").strip():
+        raise ValueError("수정 요청이 비어 있습니다")
     case = next((c for c in _cases() if c["id"] == case_id), None)
     if case is None:
         raise ValueError(f"알 수 없는 케이스: {case_id}")
@@ -266,8 +268,9 @@ def build_mod_prompt(case_id: str, cur_params: dict, text: str) -> str:
             + "\n\n사용자의 수정 요청:\n" + (text or "").strip())
 
 
-def parse_mod_response(raw: str, case_id: str) -> dict:
-    """복붙 모드: 수정 응답 검증 — 스키마 밖 필드 제거, 문자열화. 폼 반영용."""
+def parse_mod_response(raw: str, case_id: str, current_params: dict | None = None) -> dict:
+    """복붙 모드 응답을 검증하고 현재값과 합친 완전한 폼 params를 반환."""
+    import math
     import re
     text = (raw or "").strip()
     if not text:
@@ -288,22 +291,58 @@ def parse_mod_response(raw: str, case_id: str) -> dict:
             last_err = e
     if data is None:
         raise ValueError(f"응답에서 유효한 JSON을 찾지 못했습니다 ({last_err})")
+    if not isinstance(data, dict):
+        raise ValueError("JSON 최상위 값은 객체여야 합니다")
     case = next((c for c in _cases() if c["id"] == case_id), None)
     if case is None:
         raise ValueError(f"알 수 없는 케이스: {case_id}")
-    schema_keys = {f["key"] for f in case["schema"]}
-    warnings = [str(w) for w in (data.get("warnings") or [])]
+    schema = {f["key"]: f for f in case["schema"]}
+
+    def text_list(value):
+        if value is None or value == "":
+            return []
+        if isinstance(value, list):
+            return [str(item) for item in value]
+        return [str(value)]
+
+    warnings = text_list(data.get("warnings"))
     params = {}
-    for k, v in dict(data.get("params") or {}).items():
-        if k in schema_keys:
-            params[k] = str(v)
+
+    def validated(field, value):
+        if value is None or isinstance(value, (dict, list)):
+            raise ValueError(f"입력 '{field['key']}'의 값 형식이 올바르지 않습니다")
+        value = str(value)
+        if field.get("type") == "number":
+            try:
+                number = float(value)
+            except ValueError:
+                raise ValueError(f"숫자 입력 '{field['key']}'에 숫자가 아닌 값이 왔습니다: {value}")
+            if not math.isfinite(number):
+                raise ValueError(f"숫자 입력 '{field['key']}'은 유한값이어야 합니다")
+        elif field.get("type") == "select" and value not in field.get("options", []):
+            raise ValueError(
+                f"선택 입력 '{field['key']}' 값 '{value}'은 허용 목록에 없습니다: "
+                + ", ".join(str(x) for x in field.get("options", [])))
+        return value
+
+    baseline = current_params if isinstance(current_params, dict) else {}
+    for key, field in schema.items():
+        if key in baseline:
+            params[key] = validated(field, baseline[key])
+        elif "default" in field:
+            params[key] = validated(field, field["default"])
+
+    raw_params = data.get("params") or {}
+    if not isinstance(raw_params, dict) or not raw_params:
+        raise ValueError("params가 비어 있거나 객체가 아닙니다 — AI 답변 전체를 붙여넣었는지 확인")
+    for k, v in raw_params.items():
+        if k in schema:
+            params[k] = validated(schema[k], v)
         else:
             warnings.append(f"알 수 없는 입력 '{k}'은(는) 무시했습니다")
-    if not params:
-        raise ValueError("params가 비어 있습니다 — AI 답변 전체를 붙여넣었는지 확인")
     return {"case_id": case_id, "params": params,
-            "changed": [str(x) for x in (data.get("changed") or [])],
-            "not_supported": [str(x) for x in (data.get("not_supported") or [])],
+            "changed": text_list(data.get("changed")),
+            "not_supported": text_list(data.get("not_supported")),
             "warnings": warnings,
             "rationale": str(data.get("rationale") or ""), "source": "paste"}
 
