@@ -1,0 +1,30 @@
+{
+  "id": "perovskite_yang2020_backcontact_2d",
+  "name": "Yang 2020 QIBC 2D 논문 재현 (신규)",
+  "desc": "Yang et al., Energy & Environmental Science 13 (2020) 1753-1765의 quasi-interdigitated back-contact 셀 전용 케이스. 기존 IBC 2D/3D의 구조·물성·메시 값을 재사용하지 않습니다. 기본 모드는 논문 보고값과 재현 준비도를 산출하며 COMSOL을 호출하지 않습니다.",
+  "builder": "yang2020_qibc",
+  "schema": [
+    {
+      "key": "study_set",
+      "label": "대상 스터디",
+      "type": "select",
+      "options": [
+        "baseline_and_all_figures",
+        "fig1_optics",
+        "fig2_to_5_electrical",
+        "fig6_ions",
+        "fig7_photon_recycling",
+        "supplementary_all"
+      ],
+      "default": "baseline_and_all_figures"
+    },
+    {
+      "key": "mode",
+      "label": "실행 방식 (local/export는 현재 입력 누락으로 차단)",
+      "type": "select",
+      "options": ["paper_reference", "geometry_only", "local", "export"],
+      "default": "paper_reference"
+    }
+  ],
+  "data_requirements": []
+}

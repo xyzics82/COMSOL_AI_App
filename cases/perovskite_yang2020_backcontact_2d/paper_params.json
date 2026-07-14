@@ -1,0 +1,129 @@
+{
+  "bibliography": {
+    "citation": "Z. Yang et al., Device physics of back-contact perovskite solar cells, Energy Environ. Sci. 13 (2020) 1753-1765",
+    "doi": "10.1039/C9EE04203B",
+    "main_pdf_pages": 13,
+    "si_pdf_pages": 15
+  },
+  "geometry": {
+    "pitch": {"value": 2.0, "unit": "um", "source": "main", "location": "p.1754", "status": "reported"},
+    "w_htl": {"value": 1.0, "unit": "um", "source": "main", "location": "p.1754", "status": "reported"},
+    "fill_fraction": {"value": 0.5, "unit": "1", "source": "main", "location": "Fig. 7 definition and primary geometry", "status": "derived_from_reported"},
+    "etl_thickness": {"value": 100, "unit": "nm", "source": "main+SI", "location": "p.1754; Table S1", "status": "reported"},
+    "htl_thickness": {"value": 50, "unit": "nm", "source": "main+SI", "location": "p.1754; Table S1", "status": "reported"},
+    "al2o3_thickness": {"value": 100, "unit": "nm", "source": "main", "location": "p.1754", "status": "reported"},
+    "ni_thickness": {"value": 50, "unit": "nm", "source": "main", "location": "p.1754", "status": "reported"},
+    "fto_thickness": {"value": 500, "unit": "nm", "source": "main", "location": "p.1754", "status": "reported"},
+    "arc_material": {"value": "PMMA", "unit": null, "source": "main", "location": "p.1754-1756", "status": "reported"},
+    "arc_optimized_thickness": {"value": 80, "unit": "nm", "source": "main+SI", "location": "p.1756; Fig. S2", "status": "reported"},
+    "perovskite_total_height_optimized": {"value": 600, "unit": "nm", "source": "SI", "location": "Fig. S2 geometry label", "status": "reported_figure"},
+    "perovskite_cap_over_island_optimized": {"value": 400, "unit": "nm", "source": "SI", "location": "Fig. S2 geometry label", "status": "reported_figure"},
+    "perovskite_effective_optimized": {"value": 500, "unit": "nm", "source": "main+SI", "location": "p.1756; Fig. S2 caption", "status": "reported"},
+    "island_lateral_width": {"value": 1.0, "unit": "um", "source": "SI", "location": "Fig. S2 schematic combined with W_HTL", "status": "inferred_geometry"},
+    "island_centered_in_pitch": {"value": true, "unit": null, "source": "SI", "location": "Fig. S2 periodic schematic", "status": "inferred_geometry"},
+    "rear_material": {"value": "Ag", "unit": null, "source": "SI", "location": "Fig. S2 label", "status": "reported_figure"},
+    "rear_ag_thickness": {"value": null, "unit": "nm", "source": "main+SI", "location": "not stated", "status": "missing"},
+    "out_of_plane_thickness": {"value": 1.0, "unit": "mm", "source": "main", "location": "p.1755, Fig. 1b calculation description", "scope": "fig1b_optical", "status": "reported"}
+  },
+  "geometry_variants": {
+    "qibc_s1_300_glass": {
+      "effective_perovskite": {"value": 300, "unit": "nm", "source": "main+SI", "location": "p.1756; Fig. S1 caption", "status": "reported"},
+      "perovskite_total_height": {"value": 400, "unit": "nm", "source": "SI", "location": "Fig. S1 geometry label", "status": "reported_figure"},
+      "perovskite_cap_over_island": {"value": 200, "unit": "nm", "source": "SI", "location": "Fig. S1 geometry label", "status": "reported_figure"},
+      "arc_thickness": {"value": 50, "unit": "nm", "source": "main", "location": "p.1756 original structure", "status": "reported"},
+      "illumination_side": {"value": "PMMA ARC side", "unit": null, "source": "SI", "location": "Fig. S1 schematic", "status": "reported_figure"},
+      "rear_material": {"value": "glass", "unit": null, "source": "main+SI", "location": "p.1756; Fig. S1", "status": "reported"},
+      "rear_thickness": {"value": null, "unit": "nm", "source": "main+SI", "location": "not stated", "status": "missing"}
+    },
+    "qibc_s2_500_ag": {
+      "effective_perovskite": {"value": 500, "unit": "nm", "source": "main+SI", "location": "p.1756; Fig. S2 caption", "status": "reported"},
+      "perovskite_total_height": {"value": 600, "unit": "nm", "source": "SI", "location": "Fig. S2 geometry label", "status": "reported_figure"},
+      "perovskite_cap_over_island": {"value": 400, "unit": "nm", "source": "SI", "location": "Fig. S2 geometry label", "status": "reported_figure"},
+      "arc_thickness": {"value": 80, "unit": "nm", "source": "main+SI", "location": "p.1756; Fig. S2", "status": "reported"},
+      "illumination_side": {"value": "PMMA ARC side", "unit": null, "source": "SI", "location": "Fig. S2 schematic", "status": "reported_figure"},
+      "rear_material": {"value": "Ag", "unit": null, "source": "SI", "location": "Fig. S2 label", "status": "reported_figure"},
+      "rear_thickness": {"value": null, "unit": "nm", "source": "main+SI", "location": "not stated", "status": "missing"}
+    },
+    "sandwich_500": {
+      "effective_perovskite": {"value": 500, "unit": "nm", "source": "main+SI", "location": "p.1756; Fig. S4", "status": "reported"},
+      "stack_order_top_to_bottom": {"value": "Ni/HTL/perovskite/ETL/FTO/glass", "unit": null, "source": "SI", "location": "Fig. S4 schematic", "status": "reported_figure"},
+      "arc": {"value": "none shown", "unit": null, "source": "SI", "location": "Fig. S4 schematic", "status": "reported_figure"},
+      "illumination_side": {"value": "glass/FTO side", "unit": null, "source": "SI", "location": "Fig. S4 schematic", "status": "reported_figure"},
+      "glass_thickness": {"value": null, "unit": "nm", "source": "main+SI", "location": "not stated", "status": "missing"}
+    }
+  },
+  "conditions": {
+    "temperature": {"value": 300, "unit": "K", "source": "main", "location": "electrical model, p.1756", "status": "reported"},
+    "optical_wavelength_min": {"value": 300, "unit": "nm", "source": "main", "location": "eqs. 1-7 and Methods", "status": "reported"},
+    "optical_wavelength_max": {"value": 800, "unit": "nm", "source": "main", "location": "eqs. 1-7 and Methods", "status": "reported"},
+    "electrical_horizontal_bc": {"value": "periodic", "unit": null, "source": "main", "location": "Methods p.1763", "status": "reported"},
+    "optical_horizontal_bc": {"value": "Floquet periodic", "unit": null, "source": "main", "location": "Methods p.1763", "status": "reported"},
+    "optical_method": {"value": "2D frequency-domain Maxwell FEM", "unit": null, "source": "main", "location": "Methods p.1763", "status": "reported"},
+    "optical_absorbing_boundary": {"value": "PML", "unit": null, "source": "main", "location": "Methods p.1763", "status": "reported"},
+    "illumination_spectrum": {"value": "AM1.5G", "unit": null, "source": "main", "location": "Methods p.1763", "status": "reported"},
+    "electrical_time_regime": {"value": "steady-state only", "unit": null, "source": "main", "location": "electrical equations and Methods", "status": "reported"},
+    "etl_fto_contact": {"value": "ohmic", "unit": null, "source": "main", "location": "Methods p.1763", "status": "reported"},
+    "htl_ni_contact": {"value": "ohmic", "unit": null, "source": "main", "location": "Methods p.1763", "status": "reported"},
+    "additional_parasitic_contact_resistance": {"value": "not included", "unit": null, "source": "main", "location": "Methods p.1763", "status": "reported"}
+  },
+  "analysis_paths": {
+    "fig_s18_vertical_up": {"value": 0.4, "unit": "um", "source": "SI", "location": "Fig. S18 geometry label", "status": "reported_figure"},
+    "fig_s18_horizontal": {"value": 1.0, "unit": "um", "source": "SI", "location": "Fig. S18 geometry label", "status": "reported_figure"},
+    "fig_s18_vertical_down": {"value": 0.25, "unit": "um", "source": "SI", "location": "Fig. S18 geometry label", "status": "reported_figure"}
+  },
+  "materials_table_s1": {
+    "etl": {
+      "material_label": {"value": "SnO2", "unit": null, "source": "main", "location": "p.1754", "status": "reported"},
+      "chi": {"value": 4.23, "unit": "eV", "source": "SI", "location": "Table S1", "status": "reported"},
+      "eg": {"value": 3.7, "unit": "eV", "source": "SI", "location": "Table S1", "status": "reported"},
+      "epsr": {"value": 9, "unit": "1", "source": "SI", "location": "Table S1", "status": "reported"},
+      "nc": {"value": 4.36e18, "unit": "cm^-3", "source": "SI", "location": "Table S1", "status": "reported"},
+      "nv": {"value": 2.52e19, "unit": "cm^-3", "source": "SI", "location": "Table S1", "status": "reported"},
+      "nd": {"value": 1e17, "unit": "cm^-3", "source": "SI", "location": "Table S1", "status": "reported"},
+      "mu_n": {"value": 1.9e-3, "unit": "cm^2/(V*s)", "source": "SI", "location": "Table S1", "status": "reported"},
+      "mu_p": {"value": 1.9e-3, "unit": "cm^2/(V*s)", "source": "SI", "location": "Table S1", "status": "reported"},
+      "tau_n": {"value": 0.083, "unit": "s", "source": "SI", "location": "Table S1", "status": "reported"},
+      "tau_p": {"value": 0.083, "unit": "s", "source": "SI", "location": "Table S1", "status": "reported"}
+    },
+    "perovskite": {
+      "composition": {"value": null, "unit": null, "source": "main+SI", "location": "not stated", "status": "missing"},
+      "chi": {"value": 3.93, "unit": "eV", "source": "SI", "location": "Table S1", "status": "reported"},
+      "eg": {"value": 1.55, "unit": "eV", "source": "SI", "location": "Table S1", "status": "reported"},
+      "epsr": {"value": 6.5, "unit": "1", "source": "SI", "location": "Table S1", "status": "reported"},
+      "nc": {"value": 2.8e18, "unit": "cm^-3", "source": "SI", "location": "Table S1", "status": "reported"},
+      "nv": {"value": 1.8e19, "unit": "cm^-3", "source": "SI", "location": "Table S1", "status": "reported"},
+      "na": {"value": 1e13, "unit": "cm^-3", "source": "SI", "location": "Table S1", "status": "reported"},
+      "mu_n": {"value": 12.5, "unit": "cm^2/(V*s)", "source": "SI", "location": "Table S1", "status": "reported"},
+      "mu_p": {"value": 7.5, "unit": "cm^2/(V*s)", "source": "SI", "location": "Table S1", "status": "reported"},
+      "tau_n": {"value": 2.73e-6, "unit": "s", "source": "SI", "location": "Table S1", "status": "reported"},
+      "tau_p": {"value": 2.73e-6, "unit": "s", "source": "SI", "location": "Table S1", "status": "reported"},
+      "b_rad": {"value": 3.27e-11, "unit": "cm^3/s", "source": "SI", "location": "Table S1", "status": "reported"},
+      "auger_an_ap_printed_single_value": {"value": 0.88e-29, "unit": "cm^6/s", "source": "SI", "location": "Table S1", "status": "reported_ambiguous_pair"},
+      "duplicate_na_row_1e20": {"value": 1e20, "unit": "cm^-3", "source": "SI", "location": "Table S1 final duplicated row", "status": "unresolved_table_typo_do_not_use"}
+    },
+    "htl": {
+      "material_label": {"value": "NiOx", "unit": null, "source": "main", "location": "p.1754", "status": "reported"},
+      "chi": {"value": 1.7, "unit": "eV", "source": "SI", "location": "Table S1", "status": "reported"},
+      "eg": {"value": 3.6, "unit": "eV", "source": "SI", "location": "Table S1", "status": "reported"},
+      "epsr": {"value": 12, "unit": "1", "source": "SI", "location": "Table S1", "status": "reported"},
+      "nc": {"value": 9.15e17, "unit": "cm^-3", "source": "SI", "location": "Table S1", "status": "reported"},
+      "nv": {"value": 4.54e18, "unit": "cm^-3", "source": "SI", "location": "Table S1", "status": "reported"},
+      "na": {"value": 2.66e17, "unit": "cm^-3", "source": "SI", "location": "Table S1", "status": "reported"},
+      "mu_n": {"value": 0.01, "unit": "cm^2/(V*s)", "source": "SI", "location": "Table S1", "status": "reported"},
+      "mu_p": {"value": 0.01, "unit": "cm^2/(V*s)", "source": "SI", "location": "Table S1", "status": "reported"},
+      "tau_n": {"value": 1e-6, "unit": "s", "source": "SI", "location": "Table S1", "status": "reported"},
+      "tau_p": {"value": 1e-6, "unit": "s", "source": "SI", "location": "Table S1", "status": "reported"}
+    }
+  },
+  "source_missing": {
+    "optical_nk_all_layers": {"value": null, "unit": null, "source": "main refs. 41-43", "location": "files and layer mapping not supplied", "status": "missing"},
+    "optical_incidence_polarization": {"value": null, "unit": null, "source": "main+SI", "location": "not stated", "status": "missing"},
+    "pml_and_optical_mesh": {"value": null, "unit": null, "source": "main+SI", "location": "not stated", "status": "missing"},
+    "capture_cross_sections_and_vth": {"value": null, "unit": null, "source": "main+SI", "location": "not stated", "status": "missing"},
+    "electrical_periodic_api": {"value": null, "unit": null, "source": "project runtime", "location": "no verified MPh/COMSOL call in repository", "status": "verification_needed"},
+    "radiative_auger_api": {"value": null, "unit": null, "source": "project runtime", "location": "no verified MPh/COMSOL call in repository", "status": "verification_needed"},
+    "ion_mobility_diffusion_bc": {"value": null, "unit": null, "source": "main+SI", "location": "not stated", "status": "missing"},
+    "photon_recycling_spectral_inputs": {"value": null, "unit": null, "source": "main+SI", "location": "not supplied", "status": "missing"},
+    "voltage_sweep_and_solver": {"value": null, "unit": null, "source": "main+SI", "location": "not stated", "status": "missing"}
+  }
+}

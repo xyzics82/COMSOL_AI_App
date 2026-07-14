@@ -1,0 +1,14 @@
+ETL_HTL_printed,ETL_HTL_normalized,CBO_eV,VBO_eV,PCE_percent,source_status,note
+PCBM/CuO or PCBM/Cu2O,PCBM/CuO or PCBM/Cu2O,-0.37,-0.08,24.71,reported_si,
+TiO2/Cu2O,TiO2/Cu2O,-0.07,-0.08,25.50,reported_si,
+ZnO/NiOx,ZnO/NiOx,-0.47,-0.18,22.95,reported_si,
+PCBM/NiOx,PCBM/NiOx,-0.37,-0.18,24.69,reported_si,
+SnO2/NiOx,SnO2/NiOx,-0.30,-0.18,25.32,reported_si,
+TiO2/NiOx,TiO2/NiOx,-0.07,-0.18,25.47,reported_si,
+ZnO/Spiro-MeOTAD,ZnO/Spiro-MeOTAD,-0.47,-0.28,22.93,reported_si,
+TiO2/Spiro-MeOTAD or TiO2/CuI,TiO2/Spiro-MeOTAD or TiO2/CuI,-0.07,-0.28,25.40,reported_si,
+ZnO/PEDOT:PSS,ZnO/PEDOT:PSS,-0.47,-0.38,22.65,reported_si,
+SnO2/Spiro-MeOTAD,SnO2/Spiro-MeOTAD,-0.30,-0.28,25.30,reported_si,
+ZnO/P3HT,ZnO/P3HT,-0.47,-0.48,21.45,reported_si,
+TiO2/P3HT,TiO2/P3HT,-0.07,-0.48,23.44,reported_si,
+IBCA/P3HT,ICBA/P3HT,0.23,-0.48,21.97,reported_si_possible_typo,SI prints IBCA while main text names ICBA

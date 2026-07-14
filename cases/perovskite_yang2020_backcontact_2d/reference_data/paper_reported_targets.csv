@@ -1,0 +1,35 @@
+figure,metric,component,value,unit,source_status,note
+Fig.1e,current_equivalent,perovskite_absorption,24.26,mA/cm^2,reported_main,optimized QIBC
+Fig.1e,current_equivalent,reflection_loss,2.50,mA/cm^2,reported_main,optimized QIBC
+Fig.1e,current_equivalent,parasitic_absorption_loss,0.73,mA/cm^2,reported_main,optimized QIBC
+Fig.S1,current_equivalent,perovskite_absorption,21.37,mA/cm^2,reported_si,300 nm effective baseline
+Fig.S1,current_equivalent,reflection_loss,3.42,mA/cm^2,reported_si,300 nm effective baseline
+Fig.S1,current_equivalent,transmission_loss,2.0,mA/cm^2,reported_si,300 nm effective baseline
+Fig.S1,current_equivalent,other_loss,0.8,mA/cm^2,reported_si,300 nm effective baseline
+Fig.S3,parasitic_current_loss,Ni,0.291,mA/cm^2,reported_si,optimized QIBC
+Fig.S3,parasitic_current_loss,HTL,0.036,mA/cm^2,reported_si,optimized QIBC
+Fig.S3,parasitic_current_loss,FTO,0.341,mA/cm^2,reported_si,optimized QIBC
+Fig.S3,parasitic_current_loss,Ag,0.059,mA/cm^2,reported_si,optimized QIBC
+Fig.S3,parasitic_current_loss,total,0.727,mA/cm^2,reported_si,ETL is slash in source and is not forced to zero
+Fig.S4,current_equivalent,sandwich_absorption,22.38,mA/cm^2,reported_si,500 nm effective comparator
+Fig.S4,current_equivalent,sandwich_reflection_loss,2.87,mA/cm^2,reported_si,500 nm effective comparator
+Fig.S4,current_equivalent,sandwich_parasitic_loss,2.37,mA/cm^2,reported_si,500 nm effective comparator
+Fig.S4,parasitic_current_loss,Ni,0.50,mA/cm^2,reported_si,HTL is slash in source and is not forced to zero
+Fig.S4,parasitic_current_loss,ETL,0.39,mA/cm^2,reported_si,500 nm effective comparator
+Fig.S4,parasitic_current_loss,FTO,1.48,mA/cm^2,reported_si,500 nm effective comparator
+Fig.2f,Voc_intensity_slope,QIBC,1.26,kBT/q,reported_main,Dit both 1e10 cm^-2
+Fig.2f,Voc_intensity_slope,sandwich,1.32,kBT/q,reported_main,Dit both 1e10 cm^-2
+Fig.S11,Voc_intensity_slope,QIBC,1.027,kBT/q,reported_si,Dit both 1e8 cm^-2
+Fig.S11,Voc_intensity_slope,sandwich,1.012,kBT/q,reported_si,Dit both 1e8 cm^-2
+Fig.7g,OC_recombination_fraction,radiative,89,percent,reported_main,no photon recycling
+Fig.7g,OC_recombination_fraction,SRH,7,percent,reported_main,no photon recycling
+Fig.7g,OC_recombination_fraction,top_surface,3,percent,reported_main,no photon recycling
+Fig.7g,OC_recombination_fraction,Auger,1,percent,reported_main,no photon recycling
+Fig.7h,OC_recombination_fraction,radiative,68,percent,reported_main,with photon recycling
+Fig.7h,OC_recombination_fraction,SRH,17,percent,reported_main,with photon recycling
+Fig.7h,OC_recombination_fraction,top_surface,7,percent,reported_main,with photon recycling
+Fig.7h,OC_recombination_fraction,Auger,7,percent,reported_main,with photon recycling
+Fig.7i,roadmap_PCE,primary,25.4,percent,reported_main_figure,printed in Fig. 7i
+Fig.7i,roadmap_PCE,no_nonradiative,25.8,percent,reported_main,case 2
+Fig.7i,roadmap_PCE,photon_recycling,27.1,percent,reported_main,case 3
+Fig.7i,roadmap_PCE,advanced_optical,29.9,percent,reported_main,case 4 inputs not specified

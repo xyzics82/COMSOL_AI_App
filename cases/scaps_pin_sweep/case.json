@@ -1,0 +1,21 @@
+{
+  "id": "scaps_pin_sweep",
+  "name": "SCAPS-1D 변수 스윕 — J-V 겹침 + 지표 그래프",
+  "desc": "pin_mapi_app.def(기준 소자 케이스에서 GUI로 1회 생성)를 재사용해 한 변수를 스윕합니다. SCAPS를 1회 자동 구동해 값별 J-V를 순차 계산(값당 ~20초) → J-V 겹침 그래프 + 지표(Jsc/Voc/FF/PCE)-vs-값 그래프 + CSV. 스윕 대상은 SCAPS 스크립트 문법이 실증된 필드만 노출 (계면 결함은 문법 미확인이라 아직 제외 — 필요하면 Claude에게). 값은 2~12개.",
+  "engine": "scaps",
+  "schema": [
+    {"key": "sweep_param", "label": "스윕 변수", "type": "select",
+     "options": ["absorber_defect_Nt [1/cm3] (τ=1/(Nt·σ·vth))",
+                  "absorber_thickness [um]",
+                  "ETL_donor_ND [1/cm3]",
+                  "HTL_acceptor_NA [1/cm3]"],
+     "default": "absorber_defect_Nt [1/cm3] (τ=1/(Nt·σ·vth))"},
+    {"key": "sweep_values", "label": "스윕 값 목록 (쉼표, 2~12개)", "type": "text",
+     "default": "1e15,2.58e15,1e16,1e17"},
+    {"key": "v_max", "label": "I-V 최대 전압 [V]", "type": "number", "default": 1.3},
+    {"key": "v_step", "label": "I-V 스텝 [V]", "type": "number", "default": 0.02},
+    {"key": "mode", "label": "실행 방식 (local=자동 구동·회수 / export=스크립트만)",
+     "type": "select", "options": ["local", "export"], "default": "local"}
+  ],
+  "data_requirements": []
+}

@@ -1,0 +1,145 @@
+{
+  "case_id": "perovskite_yang2020_backcontact_2d",
+  "paper": "Yang et al., Energy Environ. Sci. 13 (2020) 1753-1765, DOI 10.1039/C9EE04203B",
+  "rule": "reported and inferred values are kept distinct; digitized plot values are comparison-only and never solver inputs",
+  "studies": [
+    {
+      "id": "baseline_jv",
+      "groups": ["baseline_and_all_figures", "fig2_to_5_electrical", "supplementary_all"],
+      "figures": ["Fig. 3c", "Table S1"],
+      "model": "2D QIBC drift-diffusion with optimized G(x,y)",
+      "depends_on": ["fig1_optics"],
+      "sweeps": [],
+      "outputs": ["JV", "Jsc", "Voc", "FF", "PCE", "SC/MP/OC operating points"],
+      "implementation_status": "blocked_missing_source",
+      "blockers": ["full_2d_generation_field", "electrical_voltage_sweep", "electrical_periodic_api", "radiative_auger_api", "interface_recombination_mapping"]
+    },
+    {
+      "id": "fig1_optics",
+      "groups": ["baseline_and_all_figures", "fig1_optics", "supplementary_all"],
+      "figures": ["Fig. 1", "Fig. S1", "Fig. S2", "Fig. S3", "Fig. S4"],
+      "model": "2D frequency-domain Maxwell QIBC and 1D sandwich comparator",
+      "geometry_variants": [
+        {"id": "qibc_s1_300_glass", "effective_perovskite_nm": 300, "total_height_nm": 400, "cap_nm": 200, "arc_nm": 50, "illumination_side": "PMMA ARC side", "rear": "glass", "source": "main p.1756 and SI Fig. S1", "status": "reported_main_and_si_figure"},
+        {"id": "qibc_s2_500_ag", "effective_perovskite_nm": 500, "total_height_nm": 600, "cap_nm": 400, "arc_nm": 80, "illumination_side": "PMMA ARC side", "rear": "opaque Ag", "source": "main p.1756 and SI Fig. S2", "status": "reported_main_and_si"},
+        {"id": "sandwich_500", "effective_perovskite_nm": 500, "stack_top_to_bottom": "Ni/HTL/perovskite/ETL/FTO/glass", "arc": "none shown", "illumination_side": "glass/FTO side", "source": "main p.1756 and SI Fig. S4", "status": "reported_si"}
+      ],
+      "sweeps": [
+        {"name": "wavelength", "range": "300-800 nm", "status": "reported_range_exact_grid_missing"},
+        {"name": "ARC thickness", "range": "0-150 nm", "status": "figure_range_exact_grid_missing"}
+      ],
+      "outputs": ["G(x,y)", "lateral/depth normalized G", "Abs/R/parasitic spectra", "layer loss", "Jph"],
+      "literature_targets": ["optimized Abs 24.26 mA/cm^2", "reflection 2.50 mA/cm^2", "parasitic 0.73 mA/cm^2"],
+      "implementation_status": "blocked_missing_source",
+      "blockers": ["nk_all_layers", "incidence_and_polarization", "pml_geometry_and_mesh", "verified_full_2d_wave_api"]
+    },
+    {
+      "id": "fig2_electrical_sweeps",
+      "groups": ["baseline_and_all_figures", "fig2_to_5_electrical", "supplementary_all"],
+      "figures": ["Fig. 2", "Fig. S5", "Fig. S6", "Fig. S7", "Fig. S8", "Fig. S9", "Fig. S10", "Fig. S11"],
+      "model": "QIBC and sandwich electrical parameter sweeps",
+      "depends_on": ["baseline_jv"],
+      "conditions": {
+        "Fig. 2a": "Dit_ETL=1e8 cm^-2; S_top=1 cm/s",
+        "Fig. 2b": "Dit_HTL=1e8 cm^-2; S_top=1 cm/s",
+        "Fig. 2c": "Dit_ETL=Dit_HTL=1e8 cm^-2",
+        "Fig. 2d": "no interface defect",
+        "Fig. 2e": "mu_p=mu_n/2",
+        "Fig. 2f": "Dit_ETL=Dit_HTL=1e10 cm^-2",
+        "Fig. S5": "Dit_ETL=1e13 cm^-2 at MP; exact MP voltage missing",
+        "Fig. S11": "Dit_ETL=Dit_HTL=1e8 cm^-2"
+      },
+      "sweeps": [
+        {"name": "Dit_HTL", "range": "1e8-1e14 cm^-2", "status": "reported_range_exact_grid_missing"},
+        {"name": "Dit_ETL", "range": "1e8-1e14 cm^-2", "status": "reported_range_exact_grid_missing"},
+        {"name": "S_top", "range": "1-1e4 cm/s", "status": "reported_range_exact_grid_missing"},
+        {"name": "Nt", "range": "1e12-1e18 cm^-3", "status": "reported_range_exact_grid_missing"},
+        {"name": "mu_n", "range": "1e-3-1e2 cm^2/(V*s); mu_p=mu_n/2", "status": "reported_relation"},
+        {"name": "light intensity", "range": "1-300 mW/cm^2", "status": "reported_range_exact_grid_missing"}
+      ],
+      "outputs": ["PCE", "FF", "Jsc", "Voc", "Voc-intensity slope", "SRH map"],
+      "implementation_status": "blocked_missing_source",
+      "blockers": ["interface_recombination_mapping", "bulk_trap_mapping", "exact_sweep_vectors", "baseline_jv"]
+    },
+    {
+      "id": "fig3_transport",
+      "groups": ["baseline_and_all_figures", "fig2_to_5_electrical", "supplementary_all"],
+      "figures": ["Fig. 3", "Fig. S12", "Fig. S13", "Fig. S14", "Fig. S15"],
+      "model": "recombination fractions and carrier-current/potential maps",
+      "depends_on": ["baseline_jv"],
+      "sweeps": [{"name": "Dit", "values": [1e8, 1e10], "unit": "cm^-2", "status": "reported"}],
+      "outputs": ["SRH/radiative/Auger/top fractions", "Jn/Jp maps", "integrated current", "potential maps"],
+      "implementation_status": "blocked_missing_source",
+      "blockers": ["baseline_jv", "MP_OC_exact_bias", "radiative_auger_api", "current_map_normalization_definition"]
+    },
+    {
+      "id": "fig4_doping",
+      "groups": ["baseline_and_all_figures", "fig2_to_5_electrical", "supplementary_all"],
+      "figures": ["Fig. 4", "Fig. S16", "Fig. S17"],
+      "model": "perovskite and transport-layer doping sweeps",
+      "depends_on": ["baseline_jv"],
+      "sweeps": [
+        {"name": "perovskite Na or Nd JV subset", "values": [1e15, 1e16, 1e17, 5e17, 1e18], "unit": "cm^-3", "status": "reported"},
+        {"name": "ETL Nd/Nc or HTL Na/Nv JV subset", "values": [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1], "unit": "1", "status": "reported"},
+        {"name": "broad PCE/Jsc/FF curves", "range": "figure axes only", "status": "exact_grid_missing"}
+      ],
+      "outputs": ["JV", "PCE", "Jsc", "FF"],
+      "implementation_status": "blocked_missing_source",
+      "blockers": ["baseline_jv", "exact_sweep_vectors"]
+    },
+    {
+      "id": "fig5_band_offsets",
+      "groups": ["baseline_and_all_figures", "fig2_to_5_electrical", "supplementary_all"],
+      "figures": ["Fig. 5", "Table S2"],
+      "model": "CBO/VBO matrix and literature material markers",
+      "depends_on": ["baseline_jv"],
+      "sweeps": [{"name": "CBO/VBO heatmap", "range": "figure axes approximately CBO -0.6..0.4 eV and VBO -0.5..0.5 eV", "status": "figure_axis_reading_exact_grid_missing_not_solver_input"}],
+      "reported_finding": "high-PCE window CBO -0.4..0.2 eV and VBO -0.4..0.3 eV",
+      "outputs": ["PCE heatmap", "material-combination markers"],
+      "implementation_status": "reference_table_ready_solver_blocked",
+      "blockers": ["exact_sweep_vectors", "band_offset_model_inputs", "baseline_jv"]
+    },
+    {
+      "id": "fig6_ions",
+      "groups": ["baseline_and_all_figures", "fig6_ions", "supplementary_all"],
+      "figures": ["Fig. 6", "Fig. S18", "Fig. S19", "Fig. S20"],
+      "model": "steady coupled anion/cation and electronic drift-diffusion",
+      "depends_on": ["baseline_jv"],
+      "conditions": {
+        "Fig. S18 cutline": "0.4 um up, 1 um across, 0.25 um down",
+        "Fig. 6d-f": "short-circuit condition",
+        "Fig. S19": "Ni=0, 1e15, 1e17 cm^-3",
+        "Fig. S20": "Ni=1e15, 1e17 cm^-3"
+      },
+      "sweeps": [
+        {"name": "Ni performance", "range": "1e13-1e19 cm^-3", "status": "reported_range_exact_grid_missing"},
+        {"name": "profile cases", "values": [0, 1e15, 1e17], "unit": "cm^-3", "status": "reported"}
+      ],
+      "outputs": ["normalized PCE", "bands", "free/ionic carrier profiles", "charge density", "potential and ion maps"],
+      "implementation_status": "blocked_missing_source",
+      "blockers": ["ion_model_inputs", "verified_ion_api", "baseline_jv"]
+    },
+    {
+      "id": "fig7_photon_recycling",
+      "groups": ["baseline_and_all_figures", "fig7_photon_recycling", "supplementary_all"],
+      "figures": ["Fig. 7", "Fig. S21", "Fig. S22"],
+      "model": "photon escape/parasitic/reabsorption and electrical feedback",
+      "depends_on": ["baseline_jv"],
+      "conditions": {
+        "Fig. 7c-e": "Dit_ETL=Dit_HTL=1e8 cm^-2",
+        "Fig. S21": "fill fraction=0.5; Dit=1e10 cm^-2; no-PR and PR",
+        "Fig. S22": "case1 primary; case2 nonradiative suppressed; case3 PR; case4 advanced optical design"
+      },
+      "sweeps": [
+        {"name": "Pe/Pa/Pr fill fraction", "range": "1e-2-1", "unit": "1", "status": "reported_figure_axis_exact_grid_missing"},
+        {"name": "fill fraction", "values": [0.2, 0.5, 0.8], "unit": "1", "status": "reported"},
+        {"name": "pitch", "range": "1-100 um", "status": "reported_range_exact_grid_missing"},
+        {"name": "diffusion length", "range": "1-15 um", "status": "reported_range_exact_grid_missing"},
+        {"name": "detailed JV diffusion length", "values": [1, 10], "unit": "um", "status": "reported"}
+      ],
+      "outputs": ["Pe/Pa/Pr", "PCE curves and maps", "JV", "recombination fractions", "roadmap"],
+      "implementation_status": "blocked_missing_source",
+      "blockers": ["photon_recycling_inputs", "exact_sweep_vectors", "case4_advanced_optical_design", "baseline_jv"]
+    }
+  ]
+}

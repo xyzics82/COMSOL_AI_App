@@ -1,0 +1,16 @@
+property,unit,ETL,perovskite,HTL,source_status,note
+thickness,nm,100,400-600,50,reported_si,
+electron_affinity,eV,4.23,3.93,1.7,reported_si,
+bandgap,eV,3.7,1.55,3.6,reported_si,
+relative_permittivity,1,9,6.5,12,reported_si,
+Nc,cm^-3,4.36e18,2.8e18,9.15e17,reported_si,
+Nv,cm^-3,2.52e19,1.8e19,4.54e18,reported_si,
+Nd,cm^-3,1e17,,,reported_si,
+Na,cm^-3,,1e13,2.66e17,reported_si,
+mu_n,cm^2/(V*s),1.9e-3,12.5,0.01,reported_si,
+mu_p,cm^2/(V*s),1.9e-3,7.5,0.01,reported_si,
+tau_n,s,0.083,2.73e-6,1e-6,reported_si,
+tau_p,s,0.083,2.73e-6,1e-6,reported_si,
+B_rad,cm^3/s,,3.27e-11,,reported_si,
+An/Ap_printed_single_value,cm^6/s,,0.88e-29,,reported_ambiguous_pair,source prints one value for An/Ap; symmetry is not assumed
+duplicated_Na_row,cm^-3,,1e20,,unresolved_table_typo_do_not_use,final Table S1 row duplicates the Na label

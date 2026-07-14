@@ -1,0 +1,25 @@
+{
+  "id": "scaps_paper_energies2023",
+  "name": "SCAPS-1D 논문 재현 — ITO/SnO2/MAPbI3/NiOx (Energies 2023)",
+  "desc": "오픈액세스 논문 Energies 2023, 16(21), 7438 (doi:10.3390/en16217438)의 SCAPS-1D 시뮬레이션 재현. 최초 1회: 실행하면 생성되는 recipe_paper.md 표대로 GUI에서 4층 소자를 만들어 paper_energies2023.def로 저장. 이후 완전 자동: 기준 J-V(+QE) → 논문 지표(η22.13%/Voc1.323/Jsc20.93/FF79.86)와 자동 비교표 → 옵션으로 논문 그림(Fig.2-3 두께, Fig.5a 벌크결함, Fig.5b 계면결함) 스윕 그래프. Rs 1Ω·cm²/Rsh 1kΩ·cm² 스크립트 자동 설정. ⚠️ 논문 미공개 요소(α 파일, 결함 σ·준위, 접점 일함수)는 명시 가정 — 수 % 편차는 그 차이로 해석.",
+  "engine": "scaps",
+  "schema": [
+    {"key": "def_name", "label": "SCAPS def 파일명 (GUI로 1회 제작)", "type": "text", "default": "paper_energies2023.def"},
+    {"key": "v_max", "label": "I-V 최대 전압 [V]", "type": "number", "default": 1.4},
+    {"key": "v_step", "label": "I-V 스텝 [V]", "type": "number", "default": 0.02},
+    {"key": "rs_ohmcm2", "label": "직렬저항 Rs [Ω·cm²] (논문 1)", "type": "number", "default": 1},
+    {"key": "rsh_ohmcm2", "label": "션트저항 Rsh [Ω·cm²] (논문 1000)", "type": "number", "default": 1000},
+    {"key": "do_qe", "label": "QE(300-900nm) 계산 (논문 Fig.3b)", "type": "select", "options": ["yes", "no"], "default": "yes"},
+    {"key": "use_measured_alpha", "label": "MAPbI3에 Phillips α(λ) 주입 (논문 α는 미공개 — no면 def 설정 그대로)", "type": "select", "options": ["no", "yes"], "default": "no"},
+    {"key": "bulk_sigma_cm2", "label": "흡수층 결함 σ [cm²] (논문 미기재 — 1e-15 가정 시 Voc 0.77V. 논문 Voc 1.323 재현엔 더 약한 σ 필요)", "type": "number", "default": 1e-15},
+    {"key": "stabilize", "label": "수렴 안정화 (V≈midgap 발산 시 — single→uniform ±0.1eV 수치등가, 총 Nt 유지)", "type": "select",
+     "options": ["none", "bulk_uniform", "bulk+interface_uniform"], "default": "none"},
+    {"key": "sweep_what", "label": "논문 그림 스윕 (none=기준만)", "type": "select",
+     "options": ["none", "absorber_thickness_um (Fig.2-3)", "bulk_defect_Nt [1/cm3] (Fig.5a)", "interface_defect_Nt [1/cm2] (Fig.5b, 양쪽 계면)"],
+     "default": "none"},
+    {"key": "sweep_values", "label": "스윕 값 목록 (쉼표 — 두께는 um: 0.1,0.2,0.4,0.8,1.6 / 결함은 1e14,1e15,...)", "type": "text", "default": "0.1,0.2,0.4,0.8,1.6"},
+    {"key": "extra_set", "label": "추가 set 명령 (고급·진단용, 세미콜론 구분 — 예: layer1.nd 1e19; layer4.na 1e16)", "type": "text", "default": ""},
+    {"key": "mode", "label": "실행 방식", "type": "select", "options": ["local", "export"], "default": "local"}
+  ],
+  "data_requirements": []
+}

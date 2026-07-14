@@ -1,0 +1,23 @@
+{
+  "policy": "A missing item blocks the affected solver study; it is never replaced by an inherited or fitted value.",
+  "items": [
+    {"id": "nk_all_layers", "affects": ["fig1_optics", "baseline_jv"], "status": "missing", "detail": "Layer-mapped n(lambda), k(lambda) files for PMMA/perovskite/SnO2/NiOx/FTO/Ni/Al2O3/Ag; main paper only cites refs. 41-43."},
+    {"id": "incidence_and_polarization", "affects": ["fig1_optics"], "status": "missing", "detail": "Incidence angle, polarization and source normalization are not stated."},
+    {"id": "pml_geometry_and_mesh", "affects": ["fig1_optics"], "status": "missing", "detail": "PML thickness and optical mesh are not stated."},
+    {"id": "verified_full_2d_wave_api", "affects": ["fig1_optics"], "status": "verification_needed", "detail": "Periodic ports/Floquet exist in the repository; PML and full QIBC domain-loss extraction need server verification."},
+    {"id": "full_2d_generation_field", "affects": ["baseline_jv"], "status": "missing", "detail": "Paper G(x,y) raw data are not published; flat G(z) is not an equivalent replacement."},
+    {"id": "electrical_voltage_sweep", "affects": ["baseline_jv"], "status": "missing", "detail": "Voltage range, step, bias sign and continuation settings are not stated."},
+    {"id": "electrical_periodic_api", "affects": ["baseline_jv"], "status": "verification_needed", "detail": "Electrical horizontal periodic BC is reported, but no verified Semiconductor API call exists in this repository."},
+    {"id": "radiative_auger_api", "affects": ["baseline_jv", "fig3_transport"], "status": "verification_needed", "detail": "Radiative and Auger coefficients are reported, but their COMSOL feature/API path is not verified."},
+    {"id": "interface_recombination_mapping", "affects": ["baseline_jv", "fig2_electrical_sweeps"], "status": "missing", "detail": "Dit mapping requires capture cross sections and thermal velocity or the authors' direct interface model."},
+    {"id": "bulk_trap_mapping", "affects": ["fig2_electrical_sweeps"], "status": "missing", "detail": "The Nt sweep requires capture cross sections and thermal velocity or the authors' exact Nt-to-lifetime model."},
+    {"id": "exact_sweep_vectors", "affects": ["fig2_electrical_sweeps", "fig4_doping", "fig5_band_offsets", "fig6_ions", "fig7_photon_recycling"], "status": "missing", "detail": "Most plot marker grids and heatmap grids are not published."},
+    {"id": "MP_OC_exact_bias", "affects": ["fig3_transport"], "status": "missing", "detail": "Map operating voltages are not stated."},
+    {"id": "current_map_normalization_definition", "affects": ["fig3_transport"], "status": "missing", "detail": "The exact normalization denominator for integrated-current and normalized current maps is not stated."},
+    {"id": "band_offset_model_inputs", "affects": ["fig5_band_offsets"], "status": "missing", "detail": "Table S2 supplies offsets and resulting PCE only; complete material properties and fixed Fermi-level conditions are not supplied."},
+    {"id": "ion_model_inputs", "affects": ["fig6_ions"], "status": "missing", "detail": "Ion mobility/diffusion, initial distribution, blocking BC, bias history and steady-state constraints are not stated; Fig. 6d-f itself is reported at short circuit."},
+    {"id": "verified_ion_api", "affects": ["fig6_ions"], "status": "verification_needed", "detail": "No executed COMSOL/MPh ion-coupling API path exists in this project."},
+    {"id": "photon_recycling_inputs", "affects": ["fig7_photon_recycling"], "status": "missing", "detail": "Front/rear spectral absorptance and spatial re-injection coupling are not supplied."},
+    {"id": "case4_advanced_optical_design", "affects": ["fig7_photon_recycling"], "status": "missing", "detail": "Roadmap case 4 geometry and optical inputs are not defined."}
+  ]
+}
