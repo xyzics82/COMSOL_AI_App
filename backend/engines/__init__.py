@@ -119,7 +119,7 @@ def engines_status():
     sc = find_scaps()
     out.append({"id": "scaps", "name": "SCAPS-1D", "kind": "device",
                 "available": bool(sc),
-                "detail": (f"실행 파일 OK: {sc} (⚠️ CLI 구동은 첫 실행 검증 필요)" if sc else
+                "detail": (f"실행 파일 OK: {sc} (CLI 자동 구동·자동 종료 검증 완료 2026-07-14)" if sc else
                            "미탐지 — 겐트대에 이메일 신청 후 설치, ② 엔진 설정에 scaps 경로 입력. 설치 전에도 export(레시피·스크립트 생성)와 import(.iv 업로드)는 사용 가능"),
                 "import_accept": ".iv,.qe,.txt,.dat", "modes": ["local", "export", "import"],
                 "requires": ["SCAPS 설치 (겐트대 이메일 신청, 무료) — 동글 불필요",
