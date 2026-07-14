@@ -91,6 +91,9 @@ def _recipe_md(params, log):
         "",
         "## 접점·조명",
         "- 접점: 이상 옴익(플랫밴드 or 일함수를 각 층 다수캐리어 준위에 정렬) — COMSOL v0와 동일 조건",
+        "- **⚠️ 정의 패널 필수 설정 (2026-07-15 확정, 3소자 실증)**: 'apply voltage V to' =",
+        "  **right contact(back)**, 'current reference' = **generator**. 왼쪽(조명측) 인가 +",
+        "  consumer 기준이면 SCAPS 3.3.12가 순방향 0.76~0.82V에서 수렴 붕괴(비물리 가지).",
         "- 조명: AM1.5G 1sun, ETL(front) 쪽 입사 / 반사 무시(COMSOL BL 모드와 비교할 것)",
         "",
         "## 실행·저장",
@@ -316,6 +319,61 @@ PAPER_SWEEPS = {  # 논문 그림 대응 스윕 (층 번호: 1=ITO, 2=SnO2, 3=MA
         "set interface3.IFdefect1.ntotal {v:g}"],
 }
 
+# 케이스별 논문 설정 (2026-07-14 — 설정 주도형: 새 논문은 여기+case.json만 추가)
+PAPERS = {
+    "scaps_paper_energies2023": {
+        "ref": PAPER_REF, "def": "paper_energies2023_vright.def", "abs_layer": 3,
+        "sweeps": PAPER_SWEEPS, "recipe_builder": "energies2023",
+        # 판정 이력: 2026-07-14 "재현 불가(0.8V 발산)" → **2026-07-15 정정: 4지표 완전
+        # 재현** (Jsc -0.00%/Voc +0.01%/FF -0.54%/PCE -0.61%). 근본 원인 = 정의 패널의
+        # 'voltage V applied to'. SCAPS 3.3.12에서 왼쪽(조명측) 인가+consumer 기준이면
+        # 순방향 0.76~0.82V에서 수렴 붕괴(비물리 가지) — **오른쪽(back) 인가+generator
+        # 기준**이면 동일 소자가 완주. 세 논문 소자 모두에서 재현·해소 확인 (성공했던
+        # pin def만 우연히 right 인가였던 것이 단서). def는 _vright 수정본 사용.
+    },
+    "scaps_paper_crystals2022": {
+        # Crystals 2022, 12(1), 68 — doi:10.3390/cryst12010068 (오픈액세스)
+        # FTO/TiO2/MAPbI3(암비언트, Eg 1.45 실측)/Spiro/Au — 실험-시뮬 동시 검증 모델.
+        # 순정렬 밴드(전자 0.1eV·정공 0.25eV downhill) — energies2023의 역정렬 문제 없음.
+        # 기준(재현 목표 = 논문 시뮬 열, 흡수층 Nt=9e16 실험 fit):
+        "ref": {"eta_pct": 8.75, "Voc_V": 0.8001, "Jsc_mA_cm2": 25.81, "FF_pct": 42.37,
+                "src": "Crystals 2022, 12(1), 68 — doi:10.3390/cryst12010068 (Nt=9e16)"},
+        "def": "paper_crystals2022_vright.def", "abs_layer": 3,  # vright 필수 (아래 참조)
+        "sweeps": {
+            "none": None,
+            # 논문 정량 궤적: Nt 9e16→1e11에서 Voc 0.8001→0.9037, FF 42.37→63.68,
+            # η 8.75→15.87 (1e15: 15.61 / 1e14: 15.85) — 비교 목표가 수치로 존재
+            "absorber_defect_Nt [1/cm3] (Fig.3)": ["set layer3.defect1.ntotal {v:g}"],
+            # 두께 600→200nm: Jsc 25.81→26.97, Voc→0.8812, FF→53.37, η→12.69
+            "absorber_thickness_um (Fig.4)": ["set layer3.thickness {v:g}"],
+            "ETL_chi [eV] (Fig.6, 3.4-4.3)": ["set layer2.chi {v:g}"],
+            "HTL_chi [eV] (Fig.7, 2.0-2.7)": ["set layer4.chi {v:g}"],
+        },
+        "recipe_builder": "static",  # cases/<id>/recipe.md를 작업 폴더로 복사
+    },
+    "scaps_paper_matadv_snpsc": {
+        # Materials Advances (RSC OA) "Numerical investigation of high-performance
+        # bilayer tin-based perovskite solar cells with SCAPS-1D" — **버전 3.3.12 명시**.
+        # 판별 목적: 우리 3.3.12 설치본에서 0.78V 벽이 '전 소자 공통'인지 '앞 두 논문
+        # 조합 특이'인지 확정. 단층 CsSnI3 (FTO/PCBM/CsSnI3/CFTS/Au), Voc~0.9급.
+        # 기준: 흡수층 1.0um에서 PCE 15.75% (본문 — Voc/Jsc/FF 개별값은 그림만 제공)
+        "ref": {"eta_pct": 15.75, "Voc_V": float("nan"), "Jsc_mA_cm2": float("nan"),
+                "FF_pct": float("nan"),
+                "src": "Mater. Adv. — bilayer Sn PSC, SCAPS 3.3.12 명시 (단층 CsSnI3 1.0um 기준)"},
+        "def": "paper_matadv_sn_vright.def", "abs_layer": 3,  # vright 필수 (energies 참조)
+        "sweeps": {
+            "none": None,
+            "absorber_thickness_um (0.1-1.5)": ["set layer3.thickness {v:g}"],
+            "absorber_defect_Nt [1/cm3]": ["set layer3.defect1.ntotal {v:g}"],
+            # 논문: 계면 결함 임계 1e14 cm-2 이상에서 급락 — 좋은 대조 스윕
+            "interface_defect_Nt [1/cm2] (양쪽)": [
+                "set interface2.IFdefect1.ntotal {v:g}",
+                "set interface3.IFdefect1.ntotal {v:g}"],
+        },
+        "recipe_builder": "static",
+    },
+}
+
 
 def _recipe_paper_md():
     return "\n".join([
@@ -358,13 +416,14 @@ def _recipe_paper_md():
     ])
 
 
-def _script_paper(params):
+def _script_paper(params, cfg):
+    aL = int(cfg.get("abs_layer", 3))  # 흡수층 layer 번호 (def 구조에 따름)
     vmax = float(params.get("v_max", 1.4))
     step = float(params.get("v_step", 0.02))
     npts = int(round(vmax / step)) + 1
     rs = float(params.get("rs_ohmcm2", 1.0))
     rsh = float(params.get("rsh_ohmcm2", 1000.0))
-    def_name = str(params.get("def_name") or "paper_energies2023.def")
+    def_name = str(params.get("def_name") or cfg["def"])
     do_qe = str(params.get("do_qe", "yes")) == "yes"
     use_alpha = str(params.get("use_measured_alpha", "no")) == "yes"
     sweep_key = str(params.get("sweep_what", "none"))
@@ -383,17 +442,21 @@ def _script_paper(params):
         "clear actions",
         "action light",
         "load spectrumfile AM1_5G 1 sun.spe",
-        f"set external.Rs {rs:g}",
-        f"set external.Rsh {rsh:g}",
     ]
+    # SCAPS는 0/음수를 거부 ("Value not recognised as a positive number",
+    # 2026-07-14 실검증) — Rs=0·Rsh=무한은 명령 자체를 생략 (기본 상태가 무저항)
+    if rs > 0:
+        lines.append(f"set external.Rs {rs:g}")
+    if 0 < rsh < 1e28:
+        lines.append(f"set external.Rsh {rsh:g}")
     if use_alpha:
-        lines.append("set layer3.absorptionAfile mapbi3_alpha.abs")
+        lines.append(f"set layer{aL}.absorptionAfile mapbi3_alpha.abs")
     stab = str(params.get("stabilize", "none"))
     if stab in ("bulk_uniform", "bulk+interface_uniform"):
         # 수치 안정화 (2026-07-14, V=0.80=흡수층 midgap 발산 대응): single 준위의
         # 점유 스위칭을 +-0.1eV 대역으로 분산. 총 Nt 유지 = 재결합 등가.
         # 논문 명시는 single이므로 '수치 등가 근사'로 보고서에 표기할 것.
-        lines += ["set layer3.defect1.uniform", "set layer3.defect1.Echar 0.1"]
+        lines += [f"set layer{aL}.defect1.uniform", f"set layer{aL}.defect1.Echar 0.1"]
     if stab == "bulk+interface_uniform":
         lines += ["set interface2.IFdefect1.uniform", "set interface2.IFdefect1.Echar 0.1",
                   "set interface3.IFdefect1.uniform", "set interface3.IFdefect1.Echar 0.1"]
@@ -401,8 +464,8 @@ def _script_paper(params):
     if sig != 1e-15:
         # 논문 미기재 벌크 결함 σ — Voc 맞춤 노브 (2026-07-14: σ=1e-15 가정 시 Voc 0.77V
         # vs 논문 1.323V. 논문 Voc는 Eg1.6 복사한계급 → 실효 SRH가 매우 약해야 함)
-        lines += [f"set layer3.defect1.capture_cross_section.electrons {sig:g}",
-                  f"set layer3.defect1.capture_cross_section.holes {sig:g}"]
+        lines += [f"set layer{aL}.defect1.capture_cross_section.electrons {sig:g}",
+                  f"set layer{aL}.defect1.capture_cross_section.holes {sig:g}"]
     extra = str(params.get("extra_set") or "").strip()
     if extra:  # 진단·미세조정용 자유 set 명령 (세미콜론 구분, 예: layer1.nd 1e19)
         for cmd in extra.split(";"):
@@ -423,7 +486,7 @@ def _script_paper(params):
     lines += ["calculate singleshot", "save results.iv paper_base.iv"]
     if do_qe:
         lines.append("save results.qe paper_base.qe")
-    tmpl = PAPER_SWEEPS.get(sweep_key)
+    tmpl = (cfg.get("sweeps") or {}).get(sweep_key)
     values = []
     if tmpl:
         values = [float(v) for v in
@@ -438,10 +501,23 @@ def _script_paper(params):
 
 
 def run_paper(jid, params, log, case):
-    """논문 재현 실행: 기준 J-V(+QE) → 논문 지표와 비교표 → (옵션) 논문 그림 스윕."""
+    """논문 재현 실행: 기준 J-V(+QE) → 논문 지표와 비교표 → (옵션) 논문 그림 스윕.
+
+    설정 주도형 (2026-07-14): PAPERS[case_id]에서 기준지표/def/흡수층 번호/스윕을 조회.
+    새 논문 추가 = PAPERS 항목 + case.json + (recipe.md 정적 파일) 만으로 끝.
+    """
+    cfg = PAPERS.get((case or {}).get("id") or "", PAPERS["scaps_paper_energies2023"])
+    ref = cfg["ref"]
     jd = jobs.job_dir(jid)
-    (jd / "recipe_paper.md").write_text(_recipe_paper_md(), encoding="utf-8")
-    script, values = _script_paper(params)
+    if cfg.get("recipe_builder") == "static":
+        from .. import library
+        src_recipe = library.CASES_DIR / (case or {}).get("id", "") / "recipe.md"
+        if src_recipe.exists():
+            (jd / "recipe_paper.md").write_text(
+                src_recipe.read_text(encoding="utf-8"), encoding="utf-8")
+    else:
+        (jd / "recipe_paper.md").write_text(_recipe_paper_md(), encoding="utf-8")
+    script, values = _script_paper(params, cfg)
     (jd / "batch.script").write_text(script, encoding="ascii")
     if str(params.get("mode", "local")) == "export":
         log("반출용 생성 완료 — recipe_paper.md(1회 GUI 제작) + batch.script")
@@ -451,7 +527,7 @@ def run_paper(jid, params, log, case):
         raise RuntimeError("SCAPS 실행 파일이 설정되지 않았습니다 — ② 엔진 설정 확인")
     import shutil
     scaps_dir = Path(exe).parent
-    def_name = str(params.get("def_name") or "paper_energies2023.def")
+    def_name = str(params.get("def_name") or cfg["def"])
     if not (scaps_dir / "def" / def_name).exists():
         raise RuntimeError(
             f"{def_name}이 SCAPS def 폴더에 없습니다 — ④의 recipe_paper.md 표대로 GUI에서"
@@ -500,11 +576,11 @@ def run_paper(jid, params, log, case):
     except Exception:
         pass
     ff_pct = m["FF"] * 100 if m["FF"] == m["FF"] else float("nan")
-    comp = [("Jsc [mA/cm2]", PAPER_REF["Jsc_mA_cm2"], m["Jsc_mA_cm2"]),
-            ("Voc [V]", PAPER_REF["Voc_V"], m["Voc_V"]),
-            ("FF [%]", PAPER_REF["FF_pct"], ff_pct),
-            ("PCE [%]", PAPER_REF["eta_pct"], m["PCE_pct"])]
-    log("\n=== 논문 대조 (" + PAPER_REF["src"] + ") ===")
+    comp = [("Jsc [mA/cm2]", ref["Jsc_mA_cm2"], m["Jsc_mA_cm2"]),
+            ("Voc [V]", ref["Voc_V"], m["Voc_V"]),
+            ("FF [%]", ref["FF_pct"], ff_pct),
+            ("PCE [%]", ref["eta_pct"], m["PCE_pct"])]
+    log("\n=== 논문 대조 (" + ref["src"] + ") ===")
     with open(jd / "paper_comparison.csv", "w", encoding="utf-8") as fh:
         fh.write("metric,paper,app,diff_pct\n")
         for name, ref, got in comp:
@@ -581,7 +657,7 @@ def check(jid, params, log):
 def run(jid, params, log, case):
     if (case or {}).get("id") == "scaps_pin_sweep":  # 변수 스윕 배치 (2026-07-14)
         return run_sweep(jid, params, log, case)
-    if (case or {}).get("id") == "scaps_paper_energies2023":  # 논문 재현 (2026-07-14)
+    if (case or {}).get("id") in PAPERS:  # 논문 재현 케이스들 (설정 주도형, 2026-07-14)
         return run_paper(jid, params, log, case)
     jd = jobs.job_dir(jid)
     mode = str(params.get("mode", "export"))

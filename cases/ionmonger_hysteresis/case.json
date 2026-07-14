@@ -10,7 +10,11 @@
     {"key": "taun_ns", "label": "흡수층 SRH τ [ns]", "type": "number", "default": 38.7},
     {"key": "s_ifc_cms", "label": "계면 재결합 속도 S [cm/s] (COMSOL IBC 케이스와 동일 정의)", "type": "number", "default": 1000},
     {"key": "ion_N0_m3", "label": "이온 공극 밀도 N0 [1/m³] (기본은 IonMonger 템플릿 관행값 — 첫 실행 때 템플릿과 대조)", "type": "text", "default": "1.6e25"},
-    {"key": "scan_rates_Vps", "label": "스캔 속도 목록 [V/s] (쉼표 — 느릴수록 이온 추종·히스테리시스 변화)", "type": "text", "default": "0.1"},
+    {"key": "scan_rates_Vps", "label": "스캔 속도 목록 [V/s] (쉼표 — 아래 스윕 변수를 쓰면 무시)", "type": "text", "default": "0.1"},
+    {"key": "sweep_param", "label": "변수 스윕 (없으면 위 스캔속도 목록 사용) — 값별 J-V+역/순 PCE+HI 그래프", "type": "select",
+     "options": ["", "scan_rate [V/s] (히스테리시스 연구)", "taun [ns] (흡수층 SRH)", "S_interface [cm/s] (계면 재결합)", "t_abs [nm] (흡수층 두께)", "ion_N0 [1/m3] (이온 밀도)"],
+     "default": ""},
+    {"key": "sweep_values", "label": "스윕 값 목록 (쉼표, 1~10개 — MATLAB 값당 수 분)", "type": "text", "default": "0.01,0.1,1"},
     {"key": "v_max", "label": "스캔 최대 전압 [V]", "type": "number", "default": 1.2},
     {"key": "timeout_min", "label": "MATLAB 타임아웃 [분]", "type": "number", "default": 30},
     {"key": "mode", "label": "실행 방식 (local=MATLAB 자동 / export=덱만 생성)", "type": "select", "options": ["export", "local"], "default": "export"}

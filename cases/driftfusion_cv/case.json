@@ -11,6 +11,10 @@
     {"key": "v_max", "label": "스캔 최대 전압 [V]", "type": "number", "default": 1.2},
     {"key": "light_sun", "label": "광 강도 [sun]", "type": "number", "default": 1.0},
     {"key": "points", "label": "시간 샘플 수", "type": "number", "default": 241},
+    {"key": "sweep_param", "label": "변수 스윕 (local 전용) — 값별 J-V+역/순 PCE+HI 그래프", "type": "select",
+     "options": ["", "scan_rate [V/s]", "taun [ns] (흡수층 SRH)", "S_interface [cm/s] (계면 배열 sn/sp)", "t_abs [nm] (흡수층 두께)", "light [sun] (광강도)"],
+     "default": ""},
+    {"key": "sweep_values", "label": "스윕 값 목록 (쉼표, 1~10개 — MATLAB 값당 수 분)", "type": "text", "default": "10,38.7,200"},
     {"key": "timeout_min", "label": "MATLAB 타임아웃 [분]", "type": "number", "default": 30},
     {"key": "mode", "label": "실행 방식 (local=MATLAB 자동 / export=드라이버만 생성)", "type": "select", "options": ["export", "local"], "default": "export"}
   ],

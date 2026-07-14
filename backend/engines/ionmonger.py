@@ -186,26 +186,49 @@ def check(jid, params, log):
     log("IonMonger 점검 완료 — local 실행 가능 (검증 이력: 2026-07-08 히스테리시스 E2E 통과)")
 
 
+# 스윕 가능한 변수 (2026-07-14 — 전부 params 경유라 덱 재생성만으로 적용됨)
+SWEEP_PARAMS = {
+    "scan_rate [V/s] (히스테리시스 연구)": "scan_rate_Vps",
+    "taun [ns] (흡수층 SRH)": "taun_ns",
+    "S_interface [cm/s] (계면 재결합)": "s_ifc_cms",
+    "t_abs [nm] (흡수층 두께)": "t_abs_nm",
+    "ion_N0 [1/m3] (이온 밀도)": "ion_N0_m3",
+}
+
+
 def run(jid, params, log, case):
     jd = jobs.job_dir(jid)
     mode = str(params.get("mode", "export"))
-    scan_list = [float(x) for x in str(params.get("scan_rates_Vps", params.get("scan_rate_Vps", "0.1")))
-                 .replace(" ", "").split(",") if x]
-    log(f"IonMonger {mode}: 스캔 속도 {scan_list} V/s (이온 이동 → 히스테리시스)")
-    if len(scan_list) > 1 and mode == "local":
-        log("  여러 스캔 속도는 속도별 순차 실행")
+    # 스윕 결정: sweep_param(신규, SCAPS와 동일 UX) > scan_rates_Vps(하위호환) > 단일
+    sweep_label = str(params.get("sweep_param") or "").strip()
+    sweep_key = SWEEP_PARAMS.get(sweep_label)
+    if sweep_key:
+        values = [float(x) for x in str(params.get("sweep_values") or "")
+                  .replace(" ", "").split(",") if x]
+        if not 1 <= len(values) <= 10:
+            raise RuntimeError("sweep_values는 1~10개 숫자 (MATLAB 값당 수 분)")
+        unit_fmt = sweep_label.split("[")[1].split("]")[0] if "[" in sweep_label else ""
+        runs = [(f"{sweep_key}={v:g}{unit_fmt}", sweep_key, v) for v in values]
+        log(f"IonMonger {mode} 스윕: {sweep_key} ← {values}")
+    else:
+        scan_list = [float(x) for x in
+                     str(params.get("scan_rates_Vps", params.get("scan_rate_Vps", "0.1")))
+                     .replace(" ", "").split(",") if x]
+        runs = [(f"{sr:g} V/s", "scan_rate_Vps", sr) for sr in scan_list]
+        log(f"IonMonger {mode}: 스캔 속도 {scan_list} V/s (이온 이동 → 히스테리시스)")
     if mode == "export":
         params = dict(params)
-        params["scan_rate_Vps"] = scan_list[0]
+        params[runs[0][1]] = runs[0][2]
         _gen_deck(jid, params, log)
         log("반출용 생성 완료 — MATLAB에서 실행 후 결과를 ③ '결과 가져오기'로 업로드")
         return
-    # local: matlab -batch
+    # local: matlab -batch (값별 순차)
     curves = []
-    for sr in scan_list:
+    labels_vals = []
+    for label, key, val in runs:
         jobs.check_cancel(jid)
         p2 = dict(params)
-        p2["scan_rate_Vps"] = sr
+        p2[key] = val
         _gen_deck(jid, p2, log)
         rc = run_matlab(jid, log, jd, "driver_app", timeout_s=int(float(params.get("timeout_min", 30)) * 60))
         err = jd / "run_error.txt"
@@ -214,10 +237,13 @@ def run(jid, params, log, case):
             raise RuntimeError("IonMonger 실행 실패 — matlab_console.txt/run_error.txt 확인 후 "
                                "READ_ME_FIRST.md의 수동 절차 사용. 상세: " + detail)
         arr = np.loadtxt(jd / "jv_out.csv", delimiter=",")
-        (jd / f"jv_out_scan{sr:g}.csv").write_bytes((jd / "jv_out.csv").read_bytes())
-        curves.append((f"{sr:g} V/s", arr[:, 0], arr[:, 1]))
-        log(f"  스캔 {sr:g} V/s 완료 ({len(arr)}점)")
-    _analyze_curves(jid, curves, log)
+        (jd / f"jv_out_{key}_{val:g}.csv").write_bytes((jd / "jv_out.csv").read_bytes())
+        curves.append((label, arr[:, 0], arr[:, 1]))
+        labels_vals.append((label, val))
+        log(f"  {label} 완료 ({len(arr)}점)")
+    rows = _analyze_curves(jid, curves, log)
+    if sweep_key and len(labels_vals) >= 2:
+        _plot_sweep_summary(jid, sweep_key, labels_vals, rows, log)
 
 
 def _split_scan(V, J):
@@ -266,6 +292,51 @@ def _analyze_curves(jid, curves, log):
         except Exception:
             pass
     common.plot_jv(jid, plot_curves, "jv_hysteresis.png", "IonMonger J-V (scan direction split)")
+    return rows
+
+
+def _plot_sweep_summary(jid, sweep_key, labels_vals, rows, log):
+    """스윕 값별 (역/순 PCE, HI) 그래프 + CSV — rows는 '라벨 방향' 순서로 쌓임."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    jd = jobs.job_dir(jid)
+    per = []  # (val, pce_rev, pce_fwd, hi)
+    for label, val in labels_vals:
+        mine = [m for tag, m in rows if tag.startswith(label)]
+        if len(mine) >= 2:
+            rev, fwd = mine[-2]["PCE_pct"], mine[-1]["PCE_pct"]
+            hi = (max(rev, fwd) - min(rev, fwd)) / max(rev, fwd) * 100.0 \
+                if max(rev, fwd) > 0 else float("nan")
+        elif mine:
+            rev = fwd = mine[-1]["PCE_pct"]
+            hi = float("nan")
+        else:
+            rev = fwd = hi = float("nan")
+        per.append((val, rev, fwd, hi))
+    vals = [p[0] for p in per]
+    logx = min(vals) > 0 and max(vals) / min(vals) >= 10
+    fig, axes = plt.subplots(1, 2, figsize=(9.5, 4), dpi=110)
+    axes[0].plot(vals, [p[1] for p in per], "o-", label="reverse")
+    axes[0].plot(vals, [p[2] for p in per], "s--", label="forward")
+    axes[0].set_ylabel("PCE [%]")
+    axes[0].legend(fontsize=8)
+    axes[1].plot(vals, [p[3] for p in per], "d-", color="#d97706")
+    axes[1].set_ylabel("Hysteresis index [%]")
+    for ax in axes:
+        if logx:
+            ax.set_xscale("log")
+        ax.set_xlabel(sweep_key)
+        ax.grid(alpha=0.3)
+    fig.suptitle(f"IonMonger sweep: {sweep_key}")
+    fig.tight_layout()
+    fig.savefig(jd / "sweep_metrics.png")
+    plt.close(fig)
+    with open(jd / "sweep_summary.csv", "w", encoding="utf-8") as fh:
+        fh.write("value,PCE_reverse,PCE_forward,HI_pct\n")
+        for v, r, f2, h in per:
+            fh.write(f"{v},{r},{f2},{h}\n")
+    log("스윕 요약: sweep_metrics.png + sweep_summary.csv (값별 역/순 PCE + HI)")
 
 
 def import_results(jid, params, log):

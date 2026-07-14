@@ -123,9 +123,52 @@ def check(jid, params, log):
     log("Driftfusion 점검 완료 — local 실행 가능 (검증 이력: 2026-07-08 CV E2E 통과)")
 
 
+# 스윕 가능한 변수 (2026-07-14 — IonMonger와 동일 UX, 전부 params 경유)
+SWEEP_PARAMS = {
+    "scan_rate [V/s]": "scan_rate_Vps",
+    "taun [ns] (흡수층 SRH)": "taun_ns",
+    "S_interface [cm/s] (계면 배열 sn/sp)": "s_ifc_cms",
+    "t_abs [nm] (흡수층 두께)": "t_abs_nm",
+    "light [sun] (광강도)": "light_sun",
+}
+
+
 def run(jid, params, log, case):
     jd = jobs.job_dir(jid)
     mode = str(params.get("mode", "export"))
+    sweep_label = str(params.get("sweep_param") or "").strip()
+    sweep_key = SWEEP_PARAMS.get(sweep_label)
+    if sweep_key and mode == "local":
+        values = [float(x) for x in str(params.get("sweep_values") or "")
+                  .replace(" ", "").split(",") if x]
+        if not 1 <= len(values) <= 10:
+            raise RuntimeError("sweep_values는 1~10개 숫자 (MATLAB 값당 수 분)")
+        log(f"Driftfusion 스윕: {sweep_key} ← {values}")
+        curves, labels_vals = [], []
+        for v in values:
+            jobs.check_cancel(jid)
+            p2 = dict(params)
+            p2[sweep_key] = v
+            _gen_deck(jid, p2, log)
+            rc = run_matlab(jid, log, jd, "driver_app",
+                            timeout_s=int(float(params.get("timeout_min", 30)) * 60))
+            err = jd / "run_error.txt"
+            if rc != 0 or err.exists():
+                detail = (err.read_text(encoding="utf-8", errors="replace")[:800]
+                          if err.exists() else f"코드 {rc}")
+                raise RuntimeError("Driftfusion 실행 실패 (스윕 중단) — 상세: " + detail)
+            arr = np.loadtxt(jd / "jv_out.csv", delimiter=",")
+            (jd / f"jv_out_{sweep_key}_{v:g}.csv").write_bytes(
+                (jd / "jv_out.csv").read_bytes())
+            label = f"{sweep_key}={v:g}"
+            curves.append((label, arr[:, 0], arr[:, 1]))
+            labels_vals.append((label, v))
+            log(f"  {label} 완료 ({len(arr)}점)")
+        rows = _analyze_curves(jid, curves, log)
+        if len(labels_vals) >= 2:
+            from .ionmonger import _plot_sweep_summary
+            _plot_sweep_summary(jid, sweep_key, labels_vals, rows, log)
+        return
     log(f"Driftfusion {mode}: CV 스캔 {params.get('scan_rate_Vps', 0.1)} V/s, "
         f"0→{params.get('v_max', 1.2)}V→0 왕복")
     _gen_deck(jid, params, log)
